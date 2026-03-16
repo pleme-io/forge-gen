@@ -40,6 +40,14 @@ pub struct Args {
     #[arg(long)]
     pub docs: Option<String>,
 
+    /// Comma-separated MCP server targets or "all" (via mcp-forge)
+    #[arg(long)]
+    pub mcp: Option<String>,
+
+    /// Project name for MCP server generation
+    #[arg(long)]
+    pub mcp_name: Option<String>,
+
     /// TOML resource specs directory (for IaC generation)
     #[arg(long)]
     pub resources: Option<String>,
@@ -91,13 +99,14 @@ pub async fn run(args: Args) -> Result<()> {
     let schemas = resolve_targets(&config.schemas, Category::Schema);
     let docs = resolve_targets(&config.docs, Category::Doc);
     let iac_backends = resolve_targets(&config.iac_backends, Category::Iac);
+    let mcp_targets = resolve_targets(&config.mcp_targets, Category::Mcp);
 
     let total =
-        sdks.len() + servers.len() + schemas.len() + docs.len() + iac_backends.len();
+        sdks.len() + servers.len() + schemas.len() + docs.len() + iac_backends.len() + mcp_targets.len();
 
     if total == 0 {
         bail!(
-            "nothing to generate — specify at least one of --sdks, --servers, --iac, --schemas, --docs"
+            "nothing to generate — specify at least one of --sdks, --servers, --iac, --schemas, --docs, --mcp"
         );
     }
 
@@ -137,6 +146,10 @@ pub async fn run(args: Args) -> Result<()> {
             let task = build_iac_task(name, &config);
             set.spawn(run_iac_generator(task));
         }
+        for name in &mcp_targets {
+            let task = build_mcp_task(name, &config);
+            set.spawn(run_mcp_generator(task));
+        }
 
         while let Some(res) = set.join_next().await {
             results.push(res.context("task panicked")??);
@@ -161,6 +174,10 @@ pub async fn run(args: Args) -> Result<()> {
         for name in &iac_backends {
             let task = build_iac_task(name, &config);
             results.push(run_iac_generator(task).await?);
+        }
+        for name in &mcp_targets {
+            let task = build_mcp_task(name, &config);
+            results.push(run_mcp_generator(task).await?);
         }
     }
 
@@ -372,6 +389,74 @@ async fn run_iac_generator(task: IacTask) -> Result<TaskResult> {
     Ok(TaskResult {
         name: task.name,
         category: String::from("iac"),
+        output_dir: task.output_dir,
+        success,
+    })
+}
+
+/// Describes an mcp-forge invocation.
+struct McpTask {
+    name: String,
+    spec: String,
+    output_dir: String,
+    project_name: Option<String>,
+}
+
+fn build_mcp_task(name: &str, config: &GenerateConfig) -> McpTask {
+    let out = format!("{}/mcp/{name}", config.output_dir);
+
+    McpTask {
+        name: name.to_string(),
+        spec: config.spec.clone(),
+        output_dir: out,
+        project_name: config.mcp_name.clone(),
+    }
+}
+
+async fn run_mcp_generator(task: McpTask) -> Result<TaskResult> {
+    println!(
+        "  {} [mcp/{}] mcp-forge generate",
+        "->".green(),
+        task.name,
+    );
+
+    std::fs::create_dir_all(&task.output_dir)?;
+
+    let bin = which::which("mcp-forge").ok();
+
+    let success = if let Some(bin) = bin {
+        let mut cmd = Command::new(bin);
+        cmd.args([
+            "generate",
+            "--spec",
+            &task.spec,
+            "--output",
+            &task.output_dir,
+        ]);
+
+        if let Some(ref name) = task.project_name {
+            cmd.args(["--name", name]);
+        }
+
+        let status = cmd
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .status()
+            .await
+            .with_context(|| format!("spawning mcp-forge for {}", task.name))?;
+
+        status.success()
+    } else {
+        tracing::warn!(
+            target = task.name,
+            "mcp-forge not found in PATH — skipping"
+        );
+        false
+    };
+
+    Ok(TaskResult {
+        name: task.name,
+        category: String::from("mcp"),
         output_dir: task.output_dir,
         success,
     })

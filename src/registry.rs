@@ -8,6 +8,7 @@ pub enum Category {
     Schema,
     Doc,
     Iac,
+    Mcp,
 }
 
 impl fmt::Display for Category {
@@ -18,6 +19,7 @@ impl fmt::Display for Category {
             Self::Schema => write!(f, "Schema"),
             Self::Doc => write!(f, "Doc"),
             Self::Iac => write!(f, "IaC"),
+            Self::Mcp => write!(f, "MCP"),
         }
     }
 }
@@ -96,6 +98,9 @@ pub static REGISTRY: &[GeneratorInfo] = &[
     GeneratorInfo { name: "ansible",             generator: "ansible",                category: Category::Iac, description: "Ansible collection (Python modules)" },
     GeneratorInfo { name: "pangea",              generator: "pangea",                 category: Category::Iac, description: "Pangea DSL resources (Ruby)" },
     GeneratorInfo { name: "steampipe",           generator: "steampipe",              category: Category::Iac, description: "Steampipe plugin tables (Go)" },
+
+    // ── MCP server backends (via mcp-forge) ─────────────────────────
+    GeneratorInfo { name: "mcp-rust",            generator: "mcp-rust",               category: Category::Mcp, description: "Rust MCP server (rmcp 0.15, CLI + stdio)" },
 ];
 
 /// Look up a generator by its friendly name.

@@ -16,6 +16,14 @@ pub struct Manifest {
     pub iac: Option<IacConfig>,
     pub schemas: Option<TargetList>,
     pub docs: Option<TargetList>,
+    pub mcp: Option<McpConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct McpConfig {
+    pub targets: Vec<String>,
+    /// Project name for generated MCP server (defaults to spec title)
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -55,6 +63,8 @@ pub struct GenerateConfig {
     pub iac_provider: Option<String>,
     pub schemas: Vec<String>,
     pub docs: Vec<String>,
+    pub mcp_targets: Vec<String>,
+    pub mcp_name: Option<String>,
     pub parallel: bool,
 }
 
@@ -110,6 +120,15 @@ pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateCon
         manifest.and_then(|m| m.docs.as_ref()),
     );
 
+    let mcp_targets = parse_csv_or_mcp(
+        cli.mcp.as_deref(),
+        manifest.and_then(|m| m.mcp.as_ref()),
+    );
+    let mcp_name = cli
+        .mcp_name
+        .clone()
+        .or_else(|| manifest.and_then(|m| m.mcp.as_ref().and_then(|mc| mc.name.clone())));
+
     let iac_backends = parse_csv_or_iac(
         cli.iac.as_deref(),
         manifest.and_then(|m| m.iac.as_ref()),
@@ -147,6 +166,8 @@ pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateCon
         iac_provider,
         schemas,
         docs,
+        mcp_targets,
+        mcp_name,
         parallel: cli.parallel,
     }
 }
@@ -159,6 +180,19 @@ fn parse_csv_or_manifest(cli_value: Option<&str>, manifest: Option<&TargetList>)
             .collect()
     } else if let Some(tl) = manifest {
         tl.targets.clone()
+    } else {
+        Vec::new()
+    }
+}
+
+fn parse_csv_or_mcp(cli_value: Option<&str>, manifest: Option<&McpConfig>) -> Vec<String> {
+    if let Some(csv) = cli_value {
+        csv.split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    } else if let Some(mc) = manifest {
+        mc.targets.clone()
     } else {
         Vec::new()
     }

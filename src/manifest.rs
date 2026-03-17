@@ -16,7 +16,15 @@ pub struct Manifest {
     pub iac: Option<IacConfig>,
     pub schemas: Option<TargetList>,
     pub docs: Option<TargetList>,
+    pub helm: Option<HelmConfig>,
     pub mcp: Option<McpConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HelmConfig {
+    pub targets: Vec<String>,
+    pub resources: Option<String>,
+    pub provider: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,6 +71,9 @@ pub struct GenerateConfig {
     pub iac_provider: Option<String>,
     pub schemas: Vec<String>,
     pub docs: Vec<String>,
+    pub helm_targets: Vec<String>,
+    pub helm_resources: Option<String>,
+    pub helm_provider: Option<String>,
     pub mcp_targets: Vec<String>,
     pub mcp_name: Option<String>,
     pub parallel: bool,
@@ -129,6 +140,33 @@ pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateCon
         .clone()
         .or_else(|| manifest.and_then(|m| m.mcp.as_ref().and_then(|mc| mc.name.clone())));
 
+    let helm_targets = parse_csv_or_helm(
+        cli.helm.as_deref(),
+        manifest.and_then(|m| m.helm.as_ref()),
+    );
+
+    let helm_resources = cli
+        .helm_resources
+        .clone()
+        .or_else(|| {
+            manifest.and_then(|m| {
+                m.helm
+                    .as_ref()
+                    .and_then(|h| h.resources.clone())
+            })
+        });
+
+    let helm_provider = cli
+        .helm_provider
+        .clone()
+        .or_else(|| {
+            manifest.and_then(|m| {
+                m.helm
+                    .as_ref()
+                    .and_then(|h| h.provider.clone())
+            })
+        });
+
     let iac_backends = parse_csv_or_iac(
         cli.iac.as_deref(),
         manifest.and_then(|m| m.iac.as_ref()),
@@ -164,6 +202,9 @@ pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateCon
         iac_backends,
         iac_resources,
         iac_provider,
+        helm_targets,
+        helm_resources,
+        helm_provider,
         schemas,
         docs,
         mcp_targets,
@@ -193,6 +234,19 @@ fn parse_csv_or_mcp(cli_value: Option<&str>, manifest: Option<&McpConfig>) -> Ve
             .collect()
     } else if let Some(mc) = manifest {
         mc.targets.clone()
+    } else {
+        Vec::new()
+    }
+}
+
+fn parse_csv_or_helm(cli_value: Option<&str>, manifest: Option<&HelmConfig>) -> Vec<String> {
+    if let Some(csv) = cli_value {
+        csv.split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    } else if let Some(hc) = manifest {
+        hc.targets.clone()
     } else {
         Vec::new()
     }

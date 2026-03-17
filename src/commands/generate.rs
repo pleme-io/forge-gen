@@ -40,6 +40,18 @@ pub struct Args {
     #[arg(long)]
     pub docs: Option<String>,
 
+    /// Comma-separated Helm chart targets or "all" (via iac-forge --backend helm)
+    #[arg(long)]
+    pub helm: Option<String>,
+
+    /// TOML resource specs directory (for Helm generation)
+    #[arg(long)]
+    pub helm_resources: Option<String>,
+
+    /// Path to provider.toml (for Helm generation)
+    #[arg(long)]
+    pub helm_provider: Option<String>,
+
     /// Comma-separated MCP server targets or "all" (via mcp-forge)
     #[arg(long)]
     pub mcp: Option<String>,
@@ -99,14 +111,15 @@ pub async fn run(args: Args) -> Result<()> {
     let schemas = resolve_targets(&config.schemas, Category::Schema);
     let docs = resolve_targets(&config.docs, Category::Doc);
     let iac_backends = resolve_targets(&config.iac_backends, Category::Iac);
+    let helm_targets = resolve_targets(&config.helm_targets, Category::Helm);
     let mcp_targets = resolve_targets(&config.mcp_targets, Category::Mcp);
 
     let total =
-        sdks.len() + servers.len() + schemas.len() + docs.len() + iac_backends.len() + mcp_targets.len();
+        sdks.len() + servers.len() + schemas.len() + docs.len() + iac_backends.len() + helm_targets.len() + mcp_targets.len();
 
     if total == 0 {
         bail!(
-            "nothing to generate — specify at least one of --sdks, --servers, --iac, --schemas, --docs, --mcp"
+            "nothing to generate — specify at least one of --sdks, --servers, --iac, --helm, --schemas, --docs, --mcp"
         );
     }
 
@@ -146,6 +159,10 @@ pub async fn run(args: Args) -> Result<()> {
             let task = build_iac_task(name, &config);
             set.spawn(run_iac_generator(task));
         }
+        for name in &helm_targets {
+            let task = build_helm_task(name, &config);
+            set.spawn(run_helm_generator(task));
+        }
         for name in &mcp_targets {
             let task = build_mcp_task(name, &config);
             set.spawn(run_mcp_generator(task));
@@ -174,6 +191,10 @@ pub async fn run(args: Args) -> Result<()> {
         for name in &iac_backends {
             let task = build_iac_task(name, &config);
             results.push(run_iac_generator(task).await?);
+        }
+        for name in &helm_targets {
+            let task = build_helm_task(name, &config);
+            results.push(run_helm_generator(task).await?);
         }
         for name in &mcp_targets {
             let task = build_mcp_task(name, &config);
@@ -389,6 +410,81 @@ async fn run_iac_generator(task: IacTask) -> Result<TaskResult> {
     Ok(TaskResult {
         name: task.name,
         category: String::from("iac"),
+        output_dir: task.output_dir,
+        success,
+    })
+}
+
+/// Describes a helm-forge invocation (via iac-forge --backend helm).
+struct HelmTask {
+    name: String,
+    spec: String,
+    output_dir: String,
+    resources: Option<String>,
+    provider: Option<String>,
+}
+
+fn build_helm_task(name: &str, config: &GenerateConfig) -> HelmTask {
+    let out = format!("{}/helm/{name}", config.output_dir);
+
+    HelmTask {
+        name: name.to_string(),
+        spec: config.spec.clone(),
+        output_dir: out,
+        resources: config.helm_resources.clone().or_else(|| config.iac_resources.clone()),
+        provider: config.helm_provider.clone().or_else(|| config.iac_provider.clone()),
+    }
+}
+
+async fn run_helm_generator(task: HelmTask) -> Result<TaskResult> {
+    println!(
+        "  {} [helm/{}] iac-forge generate --backend helm",
+        "->".green(),
+        task.name,
+    );
+
+    std::fs::create_dir_all(&task.output_dir)?;
+
+    let bin = which::which("iac-forge").ok();
+
+    let success = if let Some(bin) = bin {
+        let mut cmd = Command::new(bin);
+        cmd.args([
+            "generate",
+            "--backend",
+            "helm",
+            "--spec",
+            &task.spec,
+            "--output",
+            &task.output_dir,
+        ]);
+
+        if let Some(ref resources) = task.resources {
+            cmd.args(["--resources", resources]);
+        }
+        if let Some(ref provider) = task.provider {
+            cmd.args(["--provider", provider]);
+        }
+
+        let status = cmd
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .status()
+            .await
+            .with_context(|| format!("spawning iac-forge (helm) for {}", task.name))?;
+
+        status.success()
+    } else {
+        tracing::warn!(
+            target = task.name,
+            "iac-forge not found in PATH — skipping helm generation"
+        );
+        false
+    };
+
+    Ok(TaskResult {
+        name: task.name,
+        category: String::from("helm"),
         output_dir: task.output_dir,
         success,
     })

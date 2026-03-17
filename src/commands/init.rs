@@ -48,6 +48,13 @@ targets = ["go", "python", "typescript"]
 # resources = "./resources"   # directory of TOML resource specs
 # provider = "./provider.toml"
 
+# ── Helm charts (via helm-forge / iac-forge) ────────────────────────────────
+# Targets: helm
+# [helm]
+# targets = ["helm"]
+# resources = "./resources"   # directory of TOML resource specs
+# provider = "./provider.toml"
+
 # ── Schema generators ────────────────────────────────────────────────────────
 # Targets: graphql-schema, protobuf-schema, mysql-schema, postgresql-schema
 # [schemas]
@@ -57,6 +64,12 @@ targets = ["go", "python", "typescript"]
 # Targets: markdown, html, asciidoc, plantuml
 # [docs]
 # targets = ["markdown"]
+
+# ── MCP servers (via mcp-forge) ─────────────────────────────────────────────
+# Targets: mcp-rust
+# [mcp]
+# targets = ["mcp-rust"]
+# name = "my-api"
 "#;
 
 /// Write a starter `forge-gen.toml` into the target directory.

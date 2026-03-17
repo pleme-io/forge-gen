@@ -8,6 +8,7 @@ pub enum Category {
     Schema,
     Doc,
     Iac,
+    Helm,
     Mcp,
 }
 
@@ -19,6 +20,7 @@ impl fmt::Display for Category {
             Self::Schema => write!(f, "Schema"),
             Self::Doc => write!(f, "Doc"),
             Self::Iac => write!(f, "IaC"),
+            Self::Helm => write!(f, "Helm"),
             Self::Mcp => write!(f, "MCP"),
         }
     }
@@ -98,6 +100,9 @@ pub static REGISTRY: &[GeneratorInfo] = &[
     GeneratorInfo { name: "ansible",             generator: "ansible",                category: Category::Iac, description: "Ansible collection (Python modules)" },
     GeneratorInfo { name: "pangea",              generator: "pangea",                 category: Category::Iac, description: "Pangea DSL resources (Ruby)" },
     GeneratorInfo { name: "steampipe",           generator: "steampipe",              category: Category::Iac, description: "Steampipe plugin tables (Go)" },
+
+    // ── Helm chart backends (via helm-forge / iac-forge) ──────────────
+    GeneratorInfo { name: "helm",                generator: "helm",                   category: Category::Helm, description: "Helm charts from resource specs (pleme-lib)" },
 
     // ── MCP server backends (via mcp-forge) ─────────────────────────
     GeneratorInfo { name: "mcp-rust",            generator: "mcp-rust",               category: Category::Mcp, description: "Rust MCP server (rmcp 0.15, CLI + stdio)" },

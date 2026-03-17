@@ -128,3 +128,325 @@ pub fn by_category(category: Category) -> Vec<&'static GeneratorInfo> {
 pub fn names_for_category(category: Category) -> Vec<&'static str> {
     by_category(category).iter().map(|g| g.name).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Registry contents ───────────────────────────────────────────────
+
+    #[test]
+    fn registry_is_non_empty() {
+        assert!(!REGISTRY.is_empty());
+    }
+
+    #[test]
+    fn registry_contains_expected_sdk_generators() {
+        let names: Vec<&str> = REGISTRY
+            .iter()
+            .filter(|g| g.category == Category::Sdk)
+            .map(|g| g.name)
+            .collect();
+
+        for expected in ["go", "python", "rust", "java", "typescript", "ruby", "csharp"] {
+            assert!(
+                names.contains(&expected),
+                "SDK registry missing {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn registry_contains_expected_server_generators() {
+        let names: Vec<&str> = REGISTRY
+            .iter()
+            .filter(|g| g.category == Category::Server)
+            .map(|g| g.name)
+            .collect();
+
+        for expected in ["go-server", "python-fastapi", "rust-axum", "spring"] {
+            assert!(
+                names.contains(&expected),
+                "Server registry missing {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn registry_contains_expected_iac_generators() {
+        let names: Vec<&str> = REGISTRY
+            .iter()
+            .filter(|g| g.category == Category::Iac)
+            .map(|g| g.name)
+            .collect();
+
+        for expected in [
+            "terraform",
+            "pulumi",
+            "crossplane",
+            "ansible",
+            "pangea",
+            "steampipe",
+        ] {
+            assert!(
+                names.contains(&expected),
+                "IaC registry missing {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn registry_contains_expected_schema_generators() {
+        let names: Vec<&str> = REGISTRY
+            .iter()
+            .filter(|g| g.category == Category::Schema)
+            .map(|g| g.name)
+            .collect();
+
+        for expected in ["graphql-schema", "protobuf-schema", "mysql-schema", "postgresql-schema"]
+        {
+            assert!(
+                names.contains(&expected),
+                "Schema registry missing {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn registry_contains_expected_doc_generators() {
+        let names: Vec<&str> = REGISTRY
+            .iter()
+            .filter(|g| g.category == Category::Doc)
+            .map(|g| g.name)
+            .collect();
+
+        for expected in ["markdown", "html", "asciidoc", "plantuml"] {
+            assert!(
+                names.contains(&expected),
+                "Doc registry missing {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn registry_contains_expected_helm_generators() {
+        let names: Vec<&str> = REGISTRY
+            .iter()
+            .filter(|g| g.category == Category::Helm)
+            .map(|g| g.name)
+            .collect();
+
+        assert!(names.contains(&"helm"), "Helm registry missing helm");
+    }
+
+    #[test]
+    fn registry_contains_expected_mcp_generators() {
+        let names: Vec<&str> = REGISTRY
+            .iter()
+            .filter(|g| g.category == Category::Mcp)
+            .map(|g| g.name)
+            .collect();
+
+        assert!(
+            names.contains(&"mcp-rust"),
+            "MCP registry missing mcp-rust"
+        );
+    }
+
+    #[test]
+    fn registry_names_are_unique() {
+        let mut seen = std::collections::HashSet::new();
+        for g in REGISTRY {
+            assert!(
+                seen.insert(g.name),
+                "duplicate registry name: {}",
+                g.name
+            );
+        }
+    }
+
+    #[test]
+    fn registry_generators_are_non_empty() {
+        for g in REGISTRY {
+            assert!(!g.name.is_empty(), "empty name in registry");
+            assert!(!g.generator.is_empty(), "empty generator for {}", g.name);
+            assert!(
+                !g.description.is_empty(),
+                "empty description for {}",
+                g.name
+            );
+        }
+    }
+
+    // ── find() ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn find_existing_generator() {
+        let info = find("go").expect("go should exist");
+        assert_eq!(info.name, "go");
+        assert_eq!(info.generator, "go");
+        assert_eq!(info.category, Category::Sdk);
+    }
+
+    #[test]
+    fn find_rust_axum_server() {
+        let info = find("rust-axum").expect("rust-axum should exist");
+        assert_eq!(info.category, Category::Server);
+        assert_eq!(info.generator, "rust-axum");
+    }
+
+    #[test]
+    fn find_terraform_iac() {
+        let info = find("terraform").expect("terraform should exist");
+        assert_eq!(info.category, Category::Iac);
+    }
+
+    #[test]
+    fn find_mcp_rust() {
+        let info = find("mcp-rust").expect("mcp-rust should exist");
+        assert_eq!(info.category, Category::Mcp);
+    }
+
+    #[test]
+    fn find_nonexistent_returns_none() {
+        assert!(find("nonexistent-generator").is_none());
+    }
+
+    #[test]
+    fn find_empty_string_returns_none() {
+        assert!(find("").is_none());
+    }
+
+    // ── by_category() ───────────────────────────────────────────────────
+
+    #[test]
+    fn by_category_sdk_returns_only_sdks() {
+        let sdks = by_category(Category::Sdk);
+        assert!(!sdks.is_empty());
+        for g in &sdks {
+            assert_eq!(g.category, Category::Sdk);
+        }
+    }
+
+    #[test]
+    fn by_category_server_returns_only_servers() {
+        let servers = by_category(Category::Server);
+        assert!(!servers.is_empty());
+        for g in &servers {
+            assert_eq!(g.category, Category::Server);
+        }
+    }
+
+    #[test]
+    fn by_category_iac_returns_only_iac() {
+        let iac = by_category(Category::Iac);
+        assert!(!iac.is_empty());
+        for g in &iac {
+            assert_eq!(g.category, Category::Iac);
+        }
+    }
+
+    #[test]
+    fn by_category_schema_returns_only_schemas() {
+        let schemas = by_category(Category::Schema);
+        assert!(!schemas.is_empty());
+        for g in &schemas {
+            assert_eq!(g.category, Category::Schema);
+        }
+    }
+
+    #[test]
+    fn by_category_doc_returns_only_docs() {
+        let docs = by_category(Category::Doc);
+        assert!(!docs.is_empty());
+        for g in &docs {
+            assert_eq!(g.category, Category::Doc);
+        }
+    }
+
+    #[test]
+    fn by_category_helm_returns_only_helm() {
+        let helm = by_category(Category::Helm);
+        assert!(!helm.is_empty());
+        for g in &helm {
+            assert_eq!(g.category, Category::Helm);
+        }
+    }
+
+    #[test]
+    fn by_category_mcp_returns_only_mcp() {
+        let mcp = by_category(Category::Mcp);
+        assert!(!mcp.is_empty());
+        for g in &mcp {
+            assert_eq!(g.category, Category::Mcp);
+        }
+    }
+
+    #[test]
+    fn by_category_counts_are_consistent() {
+        let total: usize = [
+            by_category(Category::Sdk).len(),
+            by_category(Category::Server).len(),
+            by_category(Category::Schema).len(),
+            by_category(Category::Doc).len(),
+            by_category(Category::Iac).len(),
+            by_category(Category::Helm).len(),
+            by_category(Category::Mcp).len(),
+        ]
+        .iter()
+        .sum();
+
+        assert_eq!(total, REGISTRY.len());
+    }
+
+    // ── names_for_category() ────────────────────────────────────────────
+
+    #[test]
+    fn names_for_category_sdk() {
+        let names = names_for_category(Category::Sdk);
+        assert!(!names.is_empty());
+        assert!(names.contains(&"go"));
+        assert!(names.contains(&"python"));
+        assert!(names.contains(&"rust"));
+    }
+
+    #[test]
+    fn names_for_category_iac() {
+        let names = names_for_category(Category::Iac);
+        assert_eq!(names.len(), 6);
+        assert!(names.contains(&"terraform"));
+        assert!(names.contains(&"steampipe"));
+    }
+
+    #[test]
+    fn names_for_category_matches_by_category_length() {
+        for cat in [
+            Category::Sdk,
+            Category::Server,
+            Category::Schema,
+            Category::Doc,
+            Category::Iac,
+            Category::Helm,
+            Category::Mcp,
+        ] {
+            assert_eq!(
+                names_for_category(cat).len(),
+                by_category(cat).len(),
+                "length mismatch for {cat}"
+            );
+        }
+    }
+
+    // ── Category Display ────────────────────────────────────────────────
+
+    #[test]
+    fn category_display() {
+        assert_eq!(format!("{}", Category::Sdk), "SDK");
+        assert_eq!(format!("{}", Category::Server), "Server");
+        assert_eq!(format!("{}", Category::Schema), "Schema");
+        assert_eq!(format!("{}", Category::Doc), "Doc");
+        assert_eq!(format!("{}", Category::Iac), "IaC");
+        assert_eq!(format!("{}", Category::Helm), "Helm");
+        assert_eq!(format!("{}", Category::Mcp), "MCP");
+    }
+}

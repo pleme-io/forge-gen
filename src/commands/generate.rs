@@ -60,6 +60,14 @@ pub struct Args {
     #[arg(long)]
     pub mcp_name: Option<String>,
 
+    /// Comma-separated completion formats or "all" (via completion-forge)
+    #[arg(long)]
+    pub completions: Option<String>,
+
+    /// CLI command name for completion generation
+    #[arg(long)]
+    pub completion_name: Option<String>,
+
     /// TOML resource specs directory (for IaC generation)
     #[arg(long)]
     pub resources: Option<String>,
@@ -113,13 +121,14 @@ pub async fn run(args: Args) -> Result<()> {
     let iac_backends = resolve_targets(&config.iac_backends, Category::Iac);
     let helm_targets = resolve_targets(&config.helm_targets, Category::Helm);
     let mcp_targets = resolve_targets(&config.mcp_targets, Category::Mcp);
+    let completion_targets = resolve_targets(&config.completion_targets, Category::Completion);
 
     let total =
-        sdks.len() + servers.len() + schemas.len() + docs.len() + iac_backends.len() + helm_targets.len() + mcp_targets.len();
+        sdks.len() + servers.len() + schemas.len() + docs.len() + iac_backends.len() + helm_targets.len() + mcp_targets.len() + completion_targets.len();
 
     if total == 0 {
         bail!(
-            "nothing to generate — specify at least one of --sdks, --servers, --iac, --helm, --schemas, --docs, --mcp"
+            "nothing to generate — specify at least one of --sdks, --servers, --iac, --helm, --schemas, --docs, --mcp, --completions"
         );
     }
 
@@ -167,6 +176,10 @@ pub async fn run(args: Args) -> Result<()> {
             let task = build_mcp_task(name, &config);
             set.spawn(run_mcp_generator(task));
         }
+        for name in &completion_targets {
+            let task = build_completion_task(name, &config);
+            set.spawn(run_completion_generator(task));
+        }
 
         while let Some(res) = set.join_next().await {
             results.push(res.context("task panicked")??);
@@ -199,6 +212,10 @@ pub async fn run(args: Args) -> Result<()> {
         for name in &mcp_targets {
             let task = build_mcp_task(name, &config);
             results.push(run_mcp_generator(task).await?);
+        }
+        for name in &completion_targets {
+            let task = build_completion_task(name, &config);
+            results.push(run_completion_generator(task).await?);
         }
     }
 
@@ -553,6 +570,94 @@ async fn run_mcp_generator(task: McpTask) -> Result<TaskResult> {
     Ok(TaskResult {
         name: task.name,
         category: String::from("mcp"),
+        output_dir: task.output_dir,
+        success,
+    })
+}
+
+/// Describes a completion-forge invocation.
+struct CompletionTask {
+    name: String,
+    format: String,
+    spec: String,
+    output_dir: String,
+    project_name: Option<String>,
+    icon: Option<String>,
+    grouping: Option<String>,
+    aliases: Vec<String>,
+}
+
+fn build_completion_task(name: &str, config: &GenerateConfig) -> CompletionTask {
+    let out = format!("{}/completion/{name}", config.output_dir);
+
+    CompletionTask {
+        name: name.to_string(),
+        format: name.to_string(),
+        spec: config.spec.clone(),
+        output_dir: out,
+        project_name: config.completion_name.clone(),
+        icon: config.completion_icon.clone(),
+        grouping: config.completion_grouping.clone(),
+        aliases: config.completion_aliases.clone(),
+    }
+}
+
+async fn run_completion_generator(task: CompletionTask) -> Result<TaskResult> {
+    println!(
+        "  {} [completion/{}] completion-forge generate --format {}",
+        "->".green(),
+        task.name,
+        task.format,
+    );
+
+    std::fs::create_dir_all(&task.output_dir)?;
+
+    let bin = which::which("completion-forge").ok();
+
+    let success = if let Some(bin) = bin {
+        let mut cmd = Command::new(bin);
+        cmd.args([
+            "generate",
+            "--spec",
+            &task.spec,
+            "--output",
+            &task.output_dir,
+            "--format",
+            &task.format,
+        ]);
+
+        if let Some(ref name) = task.project_name {
+            cmd.args(["--name", name]);
+        }
+        if let Some(ref icon) = task.icon {
+            cmd.args(["--icon", icon]);
+        }
+        if let Some(ref grouping) = task.grouping {
+            cmd.args(["--grouping", grouping]);
+        }
+        if !task.aliases.is_empty() {
+            cmd.args(["--aliases", &task.aliases.join(",")]);
+        }
+
+        let status = cmd
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .status()
+            .await
+            .with_context(|| format!("spawning completion-forge for {}", task.name))?;
+
+        status.success()
+    } else {
+        tracing::warn!(
+            target = task.name,
+            "completion-forge not found in PATH — skipping"
+        );
+        false
+    };
+
+    Ok(TaskResult {
+        name: task.name,
+        category: String::from("completion"),
         output_dir: task.output_dir,
         success,
     })

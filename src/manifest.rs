@@ -18,6 +18,7 @@ pub struct Manifest {
     pub docs: Option<TargetList>,
     pub helm: Option<HelmConfig>,
     pub mcp: Option<McpConfig>,
+    pub completions: Option<CompletionConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -32,6 +33,20 @@ pub struct McpConfig {
     pub targets: Vec<String>,
     /// Project name for generated MCP server (defaults to spec title)
     pub name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CompletionConfig {
+    pub targets: Vec<String>,
+    /// CLI command name for generated completions (defaults to spec title)
+    pub name: Option<String>,
+    /// Prompt icon (Unicode glyph)
+    pub icon: Option<String>,
+    /// Grouping strategy: auto, tag, path, or operation-id
+    pub grouping: Option<String>,
+    /// Command aliases (e.g., ["ps", "pet"])
+    #[serde(default)]
+    pub aliases: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -77,6 +92,11 @@ pub struct GenerateConfig {
     pub helm_provider: Option<String>,
     pub mcp_targets: Vec<String>,
     pub mcp_name: Option<String>,
+    pub completion_targets: Vec<String>,
+    pub completion_name: Option<String>,
+    pub completion_icon: Option<String>,
+    pub completion_grouping: Option<String>,
+    pub completion_aliases: Vec<String>,
     pub parallel: bool,
 }
 
@@ -195,6 +215,34 @@ pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateCon
             })
         });
 
+    let completion_targets = parse_csv_or_completion(
+        cli.completions.as_deref(),
+        manifest.and_then(|m| m.completions.as_ref()),
+    );
+    let completion_name = cli
+        .completion_name
+        .clone()
+        .or_else(|| {
+            manifest.and_then(|m| {
+                m.completions
+                    .as_ref()
+                    .and_then(|c| c.name.clone())
+            })
+        });
+    let completion_icon = manifest.and_then(|m| {
+        m.completions
+            .as_ref()
+            .and_then(|c| c.icon.clone())
+    });
+    let completion_grouping = manifest.and_then(|m| {
+        m.completions
+            .as_ref()
+            .and_then(|c| c.grouping.clone())
+    });
+    let completion_aliases = manifest
+        .and_then(|m| m.completions.as_ref().map(|c| c.aliases.clone()))
+        .unwrap_or_default();
+
     GenerateConfig {
         spec,
         output_dir,
@@ -210,6 +258,11 @@ pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateCon
         docs,
         mcp_targets,
         mcp_name,
+        completion_targets,
+        completion_name,
+        completion_icon,
+        completion_grouping,
+        completion_aliases,
         parallel: cli.parallel,
     }
 }
@@ -266,6 +319,22 @@ fn parse_csv_or_iac(cli_value: Option<&str>, manifest: Option<&IacConfig>) -> Ve
     }
 }
 
+fn parse_csv_or_completion(
+    cli_value: Option<&str>,
+    manifest: Option<&CompletionConfig>,
+) -> Vec<String> {
+    if let Some(csv) = cli_value {
+        csv.split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    } else if let Some(cc) = manifest {
+        cc.targets.clone()
+    } else {
+        Vec::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,6 +355,8 @@ mod tests {
             helm_provider: None,
             mcp: None,
             mcp_name: None,
+            completions: None,
+            completion_name: None,
             resources: None,
             provider: None,
             manifest: None,
@@ -333,6 +404,13 @@ provider = "./helm-provider.toml"
 [mcp]
 targets = ["mcp-rust"]
 name = "my-mcp"
+
+[completions]
+targets = ["skim-tab", "fish"]
+name = "my-cli"
+icon = "☁"
+grouping = "tag"
+aliases = ["mc"]
 "#;
         let m: Manifest = toml::from_str(toml).expect("valid TOML");
 
@@ -371,6 +449,13 @@ name = "my-mcp"
         let mcp = m.mcp.as_ref().unwrap();
         assert_eq!(mcp.targets, vec!["mcp-rust"]);
         assert_eq!(mcp.name.as_deref(), Some("my-mcp"));
+
+        let comp = m.completions.as_ref().unwrap();
+        assert_eq!(comp.targets, vec!["skim-tab", "fish"]);
+        assert_eq!(comp.name.as_deref(), Some("my-cli"));
+        assert_eq!(comp.icon.as_deref(), Some("☁"));
+        assert_eq!(comp.grouping.as_deref(), Some("tag"));
+        assert_eq!(comp.aliases, vec!["mc"]);
     }
 
     #[test]
@@ -629,6 +714,12 @@ provider = "./helm-prov.toml"
 [mcp]
 targets = ["mcp-rust"]
 name = "my-server"
+
+[completions]
+targets = ["skim-tab"]
+name = "my-tool"
+icon = "☁"
+grouping = "tag"
 "#,
         )
         .unwrap();
@@ -650,6 +741,10 @@ name = "my-server"
         assert_eq!(config.helm_provider.as_deref(), Some("./helm-prov.toml"));
         assert_eq!(config.mcp_targets, vec!["mcp-rust"]);
         assert_eq!(config.mcp_name.as_deref(), Some("my-server"));
+        assert_eq!(config.completion_targets, vec!["skim-tab"]);
+        assert_eq!(config.completion_name.as_deref(), Some("my-tool"));
+        assert_eq!(config.completion_icon.as_deref(), Some("☁"));
+        assert_eq!(config.completion_grouping.as_deref(), Some("tag"));
     }
 
     // ── merge_with_cli: no manifest ─────────────────────────────────────────
@@ -673,6 +768,8 @@ name = "my-server"
         assert!(config.helm_provider.is_none());
         assert!(config.mcp_targets.is_empty());
         assert!(config.mcp_name.is_none());
+        assert!(config.completion_targets.is_empty());
+        assert!(config.completion_name.is_none());
         assert!(config.parallel);
     }
 
@@ -693,6 +790,8 @@ name = "my-server"
         cli.helm_provider = Some(String::from("./hp.toml"));
         cli.mcp = Some(String::from("mcp-rust"));
         cli.mcp_name = Some(String::from("my-name"));
+        cli.completions = Some(String::from("skim-tab,fish"));
+        cli.completion_name = Some(String::from("my-tool"));
         cli.parallel = false;
 
         let config = merge_with_cli(None, &cli);
@@ -711,6 +810,8 @@ name = "my-server"
         assert_eq!(config.helm_provider.as_deref(), Some("./hp.toml"));
         assert_eq!(config.mcp_targets, vec!["mcp-rust"]);
         assert_eq!(config.mcp_name.as_deref(), Some("my-name"));
+        assert_eq!(config.completion_targets, vec!["skim-tab", "fish"]);
+        assert_eq!(config.completion_name.as_deref(), Some("my-tool"));
         assert!(!config.parallel);
     }
 
@@ -731,6 +832,7 @@ name = "my-server"
         assert!(config.docs.is_empty());
         assert!(config.helm_targets.is_empty());
         assert!(config.mcp_targets.is_empty());
+        assert!(config.completion_targets.is_empty());
     }
 
     // ── parse_csv functions ─────────────────────────────────────────────────
@@ -851,6 +953,51 @@ name = "my-server"
     fn parse_csv_or_iac_both_none() {
         let result = parse_csv_or_iac(None, None);
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn parse_csv_or_completion_with_csv() {
+        let result = parse_csv_or_completion(Some("skim-tab,fish"), None);
+        assert_eq!(result, vec!["skim-tab", "fish"]);
+    }
+
+    #[test]
+    fn parse_csv_or_completion_uses_manifest_fallback() {
+        let cc = CompletionConfig {
+            targets: vec![String::from("skim-tab")],
+            name: Some(String::from("test")),
+            icon: None,
+            grouping: None,
+            aliases: vec![],
+        };
+        let result = parse_csv_or_completion(None, Some(&cc));
+        assert_eq!(result, vec!["skim-tab"]);
+    }
+
+    #[test]
+    fn parse_csv_or_completion_both_none() {
+        let result = parse_csv_or_completion(None, None);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn merge_cli_overrides_completions() {
+        let manifest: Manifest = toml::from_str(
+            r#"
+[completions]
+targets = ["skim-tab"]
+name = "manifest-name"
+"#,
+        )
+        .unwrap();
+
+        let mut cli = empty_cli();
+        cli.completions = Some(String::from("fish"));
+        cli.completion_name = Some(String::from("cli-name"));
+
+        let config = merge_with_cli(Some(&manifest), &cli);
+        assert_eq!(config.completion_targets, vec!["fish"]);
+        assert_eq!(config.completion_name.as_deref(), Some("cli-name"));
     }
 
     // ── Edge cases ──────────────────────────────────────────────────────────

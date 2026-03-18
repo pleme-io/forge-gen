@@ -70,6 +70,15 @@ targets = ["go", "python", "typescript"]
 # [mcp]
 # targets = ["mcp-rust"]
 # name = "my-api"
+
+# ── Shell completions (via completion-forge) ────────────────────────────────
+# Targets: skim-tab, fish
+# [completions]
+# targets = ["skim-tab", "fish"]
+# name = "my-tool"           # CLI command name (defaults to spec title)
+# icon = "☁"                 # prompt icon
+# grouping = "auto"          # auto, tag, path, or operation-id
+# aliases = ["mt"]           # command aliases
 "#;
 
 /// Write a starter `forge-gen.toml` into the target directory.

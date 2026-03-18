@@ -10,6 +10,7 @@ pub enum Category {
     Iac,
     Helm,
     Mcp,
+    Completion,
 }
 
 impl fmt::Display for Category {
@@ -22,6 +23,7 @@ impl fmt::Display for Category {
             Self::Iac => write!(f, "IaC"),
             Self::Helm => write!(f, "Helm"),
             Self::Mcp => write!(f, "MCP"),
+            Self::Completion => write!(f, "Completion"),
         }
     }
 }
@@ -106,6 +108,10 @@ pub static REGISTRY: &[GeneratorInfo] = &[
 
     // ── MCP server backends (via mcp-forge) ─────────────────────────
     GeneratorInfo { name: "mcp-rust",            generator: "mcp-rust",               category: Category::Mcp, description: "Rust MCP server (rmcp 0.15, CLI + stdio)" },
+
+    // ── Completion generators (via completion-forge) ────────────────
+    GeneratorInfo { name: "skim-tab",            generator: "skim-tab",               category: Category::Completion, description: "skim-tab YAML completion spec" },
+    GeneratorInfo { name: "fish",                generator: "fish",                   category: Category::Completion, description: "Fish shell completion file" },
 ];
 
 /// Look up a generator by its friendly name.
@@ -383,6 +389,31 @@ mod tests {
     }
 
     #[test]
+    fn registry_contains_expected_completion_generators() {
+        let names: Vec<&str> = REGISTRY
+            .iter()
+            .filter(|g| g.category == Category::Completion)
+            .map(|g| g.name)
+            .collect();
+
+        for expected in ["skim-tab", "fish"] {
+            assert!(
+                names.contains(&expected),
+                "Completion registry missing {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn by_category_completion_returns_only_completion() {
+        let completion = by_category(Category::Completion);
+        assert!(!completion.is_empty());
+        for g in &completion {
+            assert_eq!(g.category, Category::Completion);
+        }
+    }
+
+    #[test]
     fn by_category_counts_are_consistent() {
         let total: usize = [
             by_category(Category::Sdk).len(),
@@ -392,6 +423,7 @@ mod tests {
             by_category(Category::Iac).len(),
             by_category(Category::Helm).len(),
             by_category(Category::Mcp).len(),
+            by_category(Category::Completion).len(),
         ]
         .iter()
         .sum();
@@ -428,6 +460,7 @@ mod tests {
             Category::Iac,
             Category::Helm,
             Category::Mcp,
+            Category::Completion,
         ] {
             assert_eq!(
                 names_for_category(cat).len(),
@@ -448,5 +481,6 @@ mod tests {
         assert_eq!(format!("{}", Category::Iac), "IaC");
         assert_eq!(format!("{}", Category::Helm), "Helm");
         assert_eq!(format!("{}", Category::Mcp), "MCP");
+        assert_eq!(format!("{}", Category::Completion), "Completion");
     }
 }

@@ -54,17 +54,5 @@ pub fn run(args: Args) -> anyhow::Result<()> {
 }
 
 fn parse_category(s: &str) -> anyhow::Result<Category> {
-    match s.to_lowercase().as_str() {
-        "sdk" | "sdks" => Ok(Category::Sdk),
-        "server" | "servers" => Ok(Category::Server),
-        "schema" | "schemas" => Ok(Category::Schema),
-        "doc" | "docs" => Ok(Category::Doc),
-        "iac" => Ok(Category::Iac),
-        "helm" => Ok(Category::Helm),
-        "mcp" => Ok(Category::Mcp),
-        "completion" | "completions" => Ok(Category::Completion),
-        other => anyhow::bail!(
-            "unknown category: {other} (expected sdk, server, schema, doc, iac, helm, mcp, or completion)"
-        ),
-    }
+    s.parse()
 }

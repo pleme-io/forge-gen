@@ -28,23 +28,28 @@ trait TaskRunner: Send + 'static {
 }
 
 /// Execute any task that implements [`TaskRunner`] as an async subprocess.
-async fn run_task(task: &dyn TaskRunner) -> Result<TaskResult> {
+/// Core task execution: resolve binary, build args, spawn subprocess.
+///
+/// Accepts owned strings so this future is `Send` (no references held across await).
+async fn execute_task(
+    name: String,
+    category: String,
+    output_dir: String,
+    binary_name: String,
+    args: Vec<String>,
+) -> Result<TaskResult> {
     println!(
-        "  {} [{}/{}] {} {}",
+        "  {} [{category}/{name}] {binary_name} {name}",
         "->".green(),
-        task.category(),
-        task.name(),
-        task.binary_name(),
-        task.name(),
     );
 
-    std::fs::create_dir_all(task.output_dir())?;
+    std::fs::create_dir_all(&output_dir)?;
 
-    let bin = which::which(task.binary_name()).ok();
+    let bin = which::which(&binary_name).ok();
 
     let success = if let Some(bin) = bin {
         let mut cmd = Command::new(bin);
-        for arg in task.build_args() {
+        for arg in &args {
             cmd.arg(arg);
         }
         let status = cmd
@@ -52,67 +57,38 @@ async fn run_task(task: &dyn TaskRunner) -> Result<TaskResult> {
             .stderr(std::process::Stdio::piped())
             .status()
             .await
-            .with_context(|| format!("spawning {} for {}", task.binary_name(), task.name()))?;
+            .with_context(|| format!("spawning {binary_name} for {name}"))?;
         status.success()
     } else {
-        tracing::warn!(
-            target = task.name(),
-            "{} not found in PATH — skipping",
-            task.binary_name()
-        );
+        tracing::warn!(target = name, "{binary_name} not found in PATH — skipping");
         false
     };
 
-    Ok(TaskResult {
-        name: task.name().to_string(),
-        category: task.category().to_string(),
-        output_dir: task.output_dir().to_string(),
-        success,
-    })
+    Ok(TaskResult { name, category, output_dir, success })
 }
 
-/// Owned variant of `run_task` for `JoinSet::spawn` (requires `Send + 'static`).
+/// Execute a task from a trait object reference (sequential path).
+async fn run_task(task: &dyn TaskRunner) -> Result<TaskResult> {
+    execute_task(
+        task.name().to_string(),
+        task.category().to_string(),
+        task.output_dir().to_string(),
+        task.binary_name().to_string(),
+        task.build_args(),
+    )
+    .await
+}
+
+/// Execute a task from a boxed trait object (parallel `JoinSet::spawn` path).
 async fn run_task_owned(task: Box<dyn TaskRunner>) -> Result<TaskResult> {
-    println!(
-        "  {} [{}/{}] {} {}",
-        "->".green(),
-        task.category(),
-        task.name(),
-        task.binary_name(),
-        task.name(),
-    );
-
-    std::fs::create_dir_all(task.output_dir())?;
-
-    let bin = which::which(task.binary_name()).ok();
-
-    let success = if let Some(bin) = bin {
-        let mut cmd = Command::new(bin);
-        for arg in task.build_args() {
-            cmd.arg(arg);
-        }
-        let status = cmd
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::piped())
-            .status()
-            .await
-            .with_context(|| format!("spawning {} for {}", task.binary_name(), task.name()))?;
-        status.success()
-    } else {
-        tracing::warn!(
-            target = task.name(),
-            "{} not found in PATH — skipping",
-            task.binary_name()
-        );
-        false
-    };
-
-    Ok(TaskResult {
-        name: task.name().to_string(),
-        category: task.category().to_string(),
-        output_dir: task.output_dir().to_string(),
-        success,
-    })
+    execute_task(
+        task.name().to_string(),
+        task.category().to_string(),
+        task.output_dir().to_string(),
+        task.binary_name().to_string(),
+        task.build_args(),
+    )
+    .await
 }
 
 #[derive(Debug, ClapArgs)]

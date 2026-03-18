@@ -61,8 +61,8 @@ pub struct GeneratorInfo {
 
 /// Full static registry of every supported generator.
 ///
-/// Includes all 40+ openapi-generator-cli generators from `openapi-sdk.nix`,
-/// plus the 6 IaC backends from `iac-forge`.
+/// 51 generators across 8 categories: SDK (28), Server (5), Schema (4),
+/// Doc (4), IaC (6), Helm (1), MCP (1), Completion (2).
 pub static REGISTRY: &[GeneratorInfo] = &[
     // ── Client SDKs ──────────────────────────────────────────────────
     GeneratorInfo { name: "go",                  generator: "go",                    category: Category::Sdk, description: "Go client SDK" },

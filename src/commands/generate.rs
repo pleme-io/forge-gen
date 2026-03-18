@@ -28,7 +28,51 @@ trait TaskRunner: Send + 'static {
 }
 
 /// Execute any task that implements [`TaskRunner`] as an async subprocess.
-async fn run_task(task: impl TaskRunner) -> Result<TaskResult> {
+async fn run_task(task: &dyn TaskRunner) -> Result<TaskResult> {
+    println!(
+        "  {} [{}/{}] {} {}",
+        "->".green(),
+        task.category(),
+        task.name(),
+        task.binary_name(),
+        task.name(),
+    );
+
+    std::fs::create_dir_all(task.output_dir())?;
+
+    let bin = which::which(task.binary_name()).ok();
+
+    let success = if let Some(bin) = bin {
+        let mut cmd = Command::new(bin);
+        for arg in task.build_args() {
+            cmd.arg(arg);
+        }
+        let status = cmd
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .status()
+            .await
+            .with_context(|| format!("spawning {} for {}", task.binary_name(), task.name()))?;
+        status.success()
+    } else {
+        tracing::warn!(
+            target = task.name(),
+            "{} not found in PATH — skipping",
+            task.binary_name()
+        );
+        false
+    };
+
+    Ok(TaskResult {
+        name: task.name().to_string(),
+        category: task.category().to_string(),
+        output_dir: task.output_dir().to_string(),
+        success,
+    })
+}
+
+/// Owned variant of `run_task` for `JoinSet::spawn` (requires `Send + 'static`).
+async fn run_task_owned(task: Box<dyn TaskRunner>) -> Result<TaskResult> {
     println!(
         "  {} [{}/{}] {} {}",
         "->".green(),
@@ -206,77 +250,28 @@ pub async fn run(args: Args) -> Result<()> {
     let started = Instant::now();
     let mut results: Vec<TaskResult> = Vec::new();
 
+    // Build all tasks once — shared between parallel and sequential paths.
+    let mut tasks: Vec<Box<dyn TaskRunner>> = Vec::with_capacity(total);
+    for name in &sdks { tasks.push(Box::new(build_openapi_task(name, "sdk", &config))); }
+    for name in &servers { tasks.push(Box::new(build_openapi_task(name, "server", &config))); }
+    for name in &schemas { tasks.push(Box::new(build_openapi_task(name, "schema", &config))); }
+    for name in &docs { tasks.push(Box::new(build_openapi_task(name, "doc", &config))); }
+    for name in &iac_backends { tasks.push(Box::new(build_iac_task(name, &config))); }
+    for name in &helm_targets { tasks.push(Box::new(build_helm_task(name, &config))); }
+    for name in &mcp_targets { tasks.push(Box::new(build_mcp_task(name, &config))); }
+    for name in &completion_targets { tasks.push(Box::new(build_completion_task(name, &config))); }
+
     if config.parallel {
         let mut set = JoinSet::new();
-
-        for name in &sdks {
-            let task = build_openapi_task(name, "sdk", &config);
-            set.spawn(run_task(task));
+        for task in tasks {
+            set.spawn(run_task_owned(task));
         }
-        for name in &servers {
-            let task = build_openapi_task(name, "server", &config);
-            set.spawn(run_task(task));
-        }
-        for name in &schemas {
-            let task = build_openapi_task(name, "schema", &config);
-            set.spawn(run_task(task));
-        }
-        for name in &docs {
-            let task = build_openapi_task(name, "doc", &config);
-            set.spawn(run_task(task));
-        }
-        for name in &iac_backends {
-            let task = build_iac_task(name, &config);
-            set.spawn(run_task(task));
-        }
-        for name in &helm_targets {
-            let task = build_helm_task(name, &config);
-            set.spawn(run_task(task));
-        }
-        for name in &mcp_targets {
-            let task = build_mcp_task(name, &config);
-            set.spawn(run_task(task));
-        }
-        for name in &completion_targets {
-            let task = build_completion_task(name, &config);
-            set.spawn(run_task(task));
-        }
-
         while let Some(res) = set.join_next().await {
             results.push(res.context("task panicked")??);
         }
     } else {
-        for name in &sdks {
-            let task = build_openapi_task(name, "sdk", &config);
-            results.push(run_task(task).await?);
-        }
-        for name in &servers {
-            let task = build_openapi_task(name, "server", &config);
-            results.push(run_task(task).await?);
-        }
-        for name in &schemas {
-            let task = build_openapi_task(name, "schema", &config);
-            results.push(run_task(task).await?);
-        }
-        for name in &docs {
-            let task = build_openapi_task(name, "doc", &config);
-            results.push(run_task(task).await?);
-        }
-        for name in &iac_backends {
-            let task = build_iac_task(name, &config);
-            results.push(run_task(task).await?);
-        }
-        for name in &helm_targets {
-            let task = build_helm_task(name, &config);
-            results.push(run_task(task).await?);
-        }
-        for name in &mcp_targets {
-            let task = build_mcp_task(name, &config);
-            results.push(run_task(task).await?);
-        }
-        for name in &completion_targets {
-            let task = build_completion_task(name, &config);
-            results.push(run_task(task).await?);
+        for task in tasks {
+            results.push(run_task(&*task).await?);
         }
     }
 

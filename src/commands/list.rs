@@ -27,6 +27,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
             Category::Iac,
             Category::Helm,
             Category::Mcp,
+            Category::Completion,
         ]
     };
 
@@ -61,8 +62,9 @@ fn parse_category(s: &str) -> anyhow::Result<Category> {
         "iac" => Ok(Category::Iac),
         "helm" => Ok(Category::Helm),
         "mcp" => Ok(Category::Mcp),
+        "completion" | "completions" => Ok(Category::Completion),
         other => anyhow::bail!(
-            "unknown category: {other} (expected sdk, server, schema, doc, iac, helm, or mcp)"
+            "unknown category: {other} (expected sdk, server, schema, doc, iac, helm, mcp, or completion)"
         ),
     }
 }

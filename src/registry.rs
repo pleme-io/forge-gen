@@ -13,6 +13,24 @@ pub enum Category {
     Completion,
 }
 
+impl std::str::FromStr for Category {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "sdk" | "sdks" => Ok(Self::Sdk),
+            "server" | "servers" => Ok(Self::Server),
+            "schema" | "schemas" => Ok(Self::Schema),
+            "doc" | "docs" => Ok(Self::Doc),
+            "iac" => Ok(Self::Iac),
+            "helm" => Ok(Self::Helm),
+            "mcp" => Ok(Self::Mcp),
+            "completion" | "completions" => Ok(Self::Completion),
+            other => anyhow::bail!("unknown category: {other}"),
+        }
+    }
+}
+
 impl fmt::Display for Category {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -482,5 +500,18 @@ mod tests {
         assert_eq!(format!("{}", Category::Helm), "Helm");
         assert_eq!(format!("{}", Category::Mcp), "MCP");
         assert_eq!(format!("{}", Category::Completion), "Completion");
+    }
+
+    // ── Category FromStr ─────────────────────────────────────────────
+
+    #[test]
+    fn category_from_str() {
+        assert_eq!("sdk".parse::<Category>().unwrap(), Category::Sdk);
+        assert_eq!("servers".parse::<Category>().unwrap(), Category::Server);
+        assert_eq!(
+            "completion".parse::<Category>().unwrap(),
+            Category::Completion
+        );
+        assert!("nonexistent".parse::<Category>().is_err());
     }
 }

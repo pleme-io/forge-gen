@@ -135,24 +135,24 @@ pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateCon
         })
         .unwrap_or_else(|| String::from("./generated"));
 
-    let sdks = parse_csv_or_manifest(
+    let sdks = parse_csv_or(
         cli.sdks.as_deref(),
         manifest.and_then(|m| m.sdks.as_ref()),
     );
-    let servers = parse_csv_or_manifest(
+    let servers = parse_csv_or(
         cli.servers.as_deref(),
         manifest.and_then(|m| m.servers.as_ref()),
     );
-    let schemas = parse_csv_or_manifest(
+    let schemas = parse_csv_or(
         cli.schemas.as_deref(),
         manifest.and_then(|m| m.schemas.as_ref()),
     );
-    let docs = parse_csv_or_manifest(
+    let docs = parse_csv_or(
         cli.docs.as_deref(),
         manifest.and_then(|m| m.docs.as_ref()),
     );
 
-    let mcp_targets = parse_csv_or_mcp(
+    let mcp_targets = parse_csv_or(
         cli.mcp.as_deref(),
         manifest.and_then(|m| m.mcp.as_ref()),
     );
@@ -161,7 +161,7 @@ pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateCon
         .clone()
         .or_else(|| manifest.and_then(|m| m.mcp.as_ref().and_then(|mc| mc.name.clone())));
 
-    let helm_targets = parse_csv_or_helm(
+    let helm_targets = parse_csv_or(
         cli.helm.as_deref(),
         manifest.and_then(|m| m.helm.as_ref()),
     );
@@ -188,7 +188,7 @@ pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateCon
             })
         });
 
-    let iac_backends = parse_csv_or_iac(
+    let iac_backends = parse_csv_or(
         cli.iac.as_deref(),
         manifest.and_then(|m| m.iac.as_ref()),
     );
@@ -215,7 +215,7 @@ pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateCon
             })
         });
 
-    let completion_targets = parse_csv_or_completion(
+    let completion_targets = parse_csv_or(
         cli.completions.as_deref(),
         manifest.and_then(|m| m.completions.as_ref()),
     );
@@ -267,69 +267,48 @@ pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateCon
     }
 }
 
-fn parse_csv_or_manifest(cli_value: Option<&str>, manifest: Option<&TargetList>) -> Vec<String> {
-    if let Some(csv) = cli_value {
-        csv.split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect()
-    } else if let Some(tl) = manifest {
-        tl.targets.clone()
-    } else {
-        Vec::new()
+trait HasTargets {
+    fn targets(&self) -> &[String];
+}
+
+impl HasTargets for TargetList {
+    fn targets(&self) -> &[String] {
+        &self.targets
     }
 }
 
-fn parse_csv_or_mcp(cli_value: Option<&str>, manifest: Option<&McpConfig>) -> Vec<String> {
-    if let Some(csv) = cli_value {
-        csv.split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect()
-    } else if let Some(mc) = manifest {
-        mc.targets.clone()
-    } else {
-        Vec::new()
+impl HasTargets for McpConfig {
+    fn targets(&self) -> &[String] {
+        &self.targets
     }
 }
 
-fn parse_csv_or_helm(cli_value: Option<&str>, manifest: Option<&HelmConfig>) -> Vec<String> {
-    if let Some(csv) = cli_value {
-        csv.split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect()
-    } else if let Some(hc) = manifest {
-        hc.targets.clone()
-    } else {
-        Vec::new()
+impl HasTargets for HelmConfig {
+    fn targets(&self) -> &[String] {
+        &self.targets
     }
 }
 
-fn parse_csv_or_iac(cli_value: Option<&str>, manifest: Option<&IacConfig>) -> Vec<String> {
-    if let Some(csv) = cli_value {
-        csv.split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect()
-    } else if let Some(ic) = manifest {
-        ic.backends.clone()
-    } else {
-        Vec::new()
+impl HasTargets for IacConfig {
+    fn targets(&self) -> &[String] {
+        &self.backends
     }
 }
 
-fn parse_csv_or_completion(
-    cli_value: Option<&str>,
-    manifest: Option<&CompletionConfig>,
-) -> Vec<String> {
+impl HasTargets for CompletionConfig {
+    fn targets(&self) -> &[String] {
+        &self.targets
+    }
+}
+
+fn parse_csv_or<T: HasTargets>(cli_value: Option<&str>, manifest: Option<&T>) -> Vec<String> {
     if let Some(csv) = cli_value {
         csv.split(',')
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect()
-    } else if let Some(cc) = manifest {
-        cc.targets.clone()
+    } else if let Some(m) = manifest {
+        m.targets().to_vec()
     } else {
         Vec::new()
     }
@@ -838,58 +817,58 @@ grouping = "tag"
     // ── parse_csv functions ─────────────────────────────────────────────────
 
     #[test]
-    fn parse_csv_or_manifest_with_csv() {
-        let result = parse_csv_or_manifest(Some("go, python , rust"), None);
+    fn parse_csv_or_target_list_with_csv() {
+        let result = parse_csv_or::<TargetList>(Some("go, python , rust"), None);
         assert_eq!(result, vec!["go", "python", "rust"]);
     }
 
     #[test]
-    fn parse_csv_or_manifest_with_single_value() {
-        let result = parse_csv_or_manifest(Some("go"), None);
+    fn parse_csv_or_target_list_with_single_value() {
+        let result = parse_csv_or::<TargetList>(Some("go"), None);
         assert_eq!(result, vec!["go"]);
     }
 
     #[test]
-    fn parse_csv_or_manifest_empty_csv() {
-        let result = parse_csv_or_manifest(Some(""), None);
+    fn parse_csv_or_target_list_empty_csv() {
+        let result = parse_csv_or::<TargetList>(Some(""), None);
         assert!(result.is_empty());
     }
 
     #[test]
-    fn parse_csv_or_manifest_csv_with_trailing_comma() {
-        let result = parse_csv_or_manifest(Some("go,python,"), None);
+    fn parse_csv_or_target_list_csv_with_trailing_comma() {
+        let result = parse_csv_or::<TargetList>(Some("go,python,"), None);
         assert_eq!(result, vec!["go", "python"]);
     }
 
     #[test]
-    fn parse_csv_or_manifest_csv_overrides_manifest() {
+    fn parse_csv_or_target_list_csv_overrides_manifest() {
         let tl = TargetList {
             targets: vec![String::from("java")],
             _overrides: None,
         };
-        let result = parse_csv_or_manifest(Some("go"), Some(&tl));
+        let result = parse_csv_or(Some("go"), Some(&tl));
         assert_eq!(result, vec!["go"]);
     }
 
     #[test]
-    fn parse_csv_or_manifest_uses_manifest_fallback() {
+    fn parse_csv_or_target_list_uses_manifest_fallback() {
         let tl = TargetList {
             targets: vec![String::from("java"), String::from("kotlin")],
             _overrides: None,
         };
-        let result = parse_csv_or_manifest(None, Some(&tl));
+        let result = parse_csv_or(None, Some(&tl));
         assert_eq!(result, vec!["java", "kotlin"]);
     }
 
     #[test]
-    fn parse_csv_or_manifest_both_none() {
-        let result = parse_csv_or_manifest(None, None);
+    fn parse_csv_or_target_list_both_none() {
+        let result = parse_csv_or::<TargetList>(None, None);
         assert!(result.is_empty());
     }
 
     #[test]
     fn parse_csv_or_mcp_with_csv() {
-        let result = parse_csv_or_mcp(Some("mcp-rust"), None);
+        let result = parse_csv_or::<McpConfig>(Some("mcp-rust"), None);
         assert_eq!(result, vec!["mcp-rust"]);
     }
 
@@ -899,19 +878,19 @@ grouping = "tag"
             targets: vec![String::from("mcp-rust")],
             name: Some(String::from("test")),
         };
-        let result = parse_csv_or_mcp(None, Some(&mc));
+        let result = parse_csv_or(None, Some(&mc));
         assert_eq!(result, vec!["mcp-rust"]);
     }
 
     #[test]
     fn parse_csv_or_mcp_both_none() {
-        let result = parse_csv_or_mcp(None, None);
+        let result = parse_csv_or::<McpConfig>(None, None);
         assert!(result.is_empty());
     }
 
     #[test]
     fn parse_csv_or_helm_with_csv() {
-        let result = parse_csv_or_helm(Some("helm"), None);
+        let result = parse_csv_or::<HelmConfig>(Some("helm"), None);
         assert_eq!(result, vec!["helm"]);
     }
 
@@ -922,19 +901,19 @@ grouping = "tag"
             resources: None,
             provider: None,
         };
-        let result = parse_csv_or_helm(None, Some(&hc));
+        let result = parse_csv_or(None, Some(&hc));
         assert_eq!(result, vec!["helm"]);
     }
 
     #[test]
     fn parse_csv_or_helm_both_none() {
-        let result = parse_csv_or_helm(None, None);
+        let result = parse_csv_or::<HelmConfig>(None, None);
         assert!(result.is_empty());
     }
 
     #[test]
     fn parse_csv_or_iac_with_csv() {
-        let result = parse_csv_or_iac(Some("terraform,pulumi"), None);
+        let result = parse_csv_or::<IacConfig>(Some("terraform,pulumi"), None);
         assert_eq!(result, vec!["terraform", "pulumi"]);
     }
 
@@ -945,19 +924,19 @@ grouping = "tag"
             resources: None,
             provider: None,
         };
-        let result = parse_csv_or_iac(None, Some(&ic));
+        let result = parse_csv_or(None, Some(&ic));
         assert_eq!(result, vec!["crossplane"]);
     }
 
     #[test]
     fn parse_csv_or_iac_both_none() {
-        let result = parse_csv_or_iac(None, None);
+        let result = parse_csv_or::<IacConfig>(None, None);
         assert!(result.is_empty());
     }
 
     #[test]
     fn parse_csv_or_completion_with_csv() {
-        let result = parse_csv_or_completion(Some("skim-tab,fish"), None);
+        let result = parse_csv_or::<CompletionConfig>(Some("skim-tab,fish"), None);
         assert_eq!(result, vec!["skim-tab", "fish"]);
     }
 
@@ -970,13 +949,13 @@ grouping = "tag"
             grouping: None,
             aliases: vec![],
         };
-        let result = parse_csv_or_completion(None, Some(&cc));
+        let result = parse_csv_or(None, Some(&cc));
         assert_eq!(result, vec!["skim-tab"]);
     }
 
     #[test]
     fn parse_csv_or_completion_both_none() {
-        let result = parse_csv_or_completion(None, None);
+        let result = parse_csv_or::<CompletionConfig>(None, None);
         assert!(result.is_empty());
     }
 
@@ -1019,13 +998,13 @@ name = "manifest-name"
 
     #[test]
     fn parse_csv_whitespace_only() {
-        let result = parse_csv_or_manifest(Some("  ,  , "), None);
+        let result = parse_csv_or::<TargetList>(Some("  ,  , "), None);
         assert!(result.is_empty());
     }
 
     #[test]
     fn parse_csv_preserves_case() {
-        let result = parse_csv_or_manifest(Some("Go,PYTHON,Rust"), None);
+        let result = parse_csv_or::<TargetList>(Some("Go,PYTHON,Rust"), None);
         assert_eq!(result, vec!["Go", "PYTHON", "Rust"]);
     }
 

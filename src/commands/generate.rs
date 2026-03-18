@@ -662,3 +662,90 @@ async fn run_completion_generator(task: CompletionTask) -> Result<TaskResult> {
         success,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_targets_empty_returns_empty() {
+        assert!(resolve_targets(&[], Category::Sdk).is_empty());
+    }
+
+    #[test]
+    fn resolve_targets_all_expands() {
+        let result = resolve_targets(&["all".to_string()], Category::Completion);
+        assert!(result.contains(&"skim-tab".to_string()));
+        assert!(result.contains(&"fish".to_string()));
+    }
+
+    #[test]
+    fn resolve_targets_specific_passes_through() {
+        let input = vec!["go".to_string(), "python".to_string()];
+        let result = resolve_targets(&input, Category::Sdk);
+        assert_eq!(result, input);
+    }
+
+    #[test]
+    fn build_openapi_task_sets_correct_fields() {
+        let config = GenerateConfig {
+            spec: "api.yaml".to_string(),
+            output_dir: "./out".to_string(),
+            sdks: vec![],
+            servers: vec![],
+            iac_backends: vec![],
+            iac_resources: None,
+            iac_provider: None,
+            schemas: vec![],
+            docs: vec![],
+            helm_targets: vec![],
+            helm_resources: None,
+            helm_provider: None,
+            mcp_targets: vec![],
+            mcp_name: None,
+            completion_targets: vec![],
+            completion_name: None,
+            completion_icon: None,
+            completion_grouping: None,
+            completion_aliases: vec![],
+            parallel: true,
+        };
+        let task = build_openapi_task("go", "sdk", &config);
+        assert_eq!(task.name, "go");
+        assert_eq!(task.category, "sdk");
+        assert_eq!(task.spec, "api.yaml");
+        assert!(task.output_dir.ends_with("sdk/go"));
+    }
+
+    #[test]
+    fn build_completion_task_sets_correct_fields() {
+        let config = GenerateConfig {
+            spec: "api.yaml".to_string(),
+            output_dir: "./out".to_string(),
+            sdks: vec![],
+            servers: vec![],
+            iac_backends: vec![],
+            iac_resources: None,
+            iac_provider: None,
+            schemas: vec![],
+            docs: vec![],
+            helm_targets: vec![],
+            helm_resources: None,
+            helm_provider: None,
+            mcp_targets: vec![],
+            mcp_name: None,
+            completion_targets: vec![],
+            completion_name: Some("my-tool".to_string()),
+            completion_icon: Some("\u{2601}".to_string()),
+            completion_grouping: Some("tag".to_string()),
+            completion_aliases: vec!["mt".to_string()],
+            parallel: true,
+        };
+        let task = build_completion_task("skim-tab", &config);
+        assert_eq!(task.name, "skim-tab");
+        assert_eq!(task.format, "skim-tab");
+        assert_eq!(task.project_name.as_deref(), Some("my-tool"));
+        assert_eq!(task.icon.as_deref(), Some("\u{2601}"));
+        assert_eq!(task.aliases, vec!["mt"]);
+    }
+}

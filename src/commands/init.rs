@@ -107,3 +107,63 @@ pub fn run(args: Args) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn starter_manifest_is_valid_toml() {
+        // The starter manifest is heavily commented; ensure it parses as
+        // valid TOML (toml::Value accepts any valid document).
+        let parsed: Result<toml::Value, _> = toml::from_str(STARTER_MANIFEST);
+        assert!(
+            parsed.is_ok(),
+            "STARTER_MANIFEST is not valid TOML: {}",
+            parsed.unwrap_err()
+        );
+    }
+
+    #[test]
+    fn init_creates_file() {
+        let dir = std::env::temp_dir().join("forge_gen_test_init_creates");
+        // Clean up any leftovers from a previous run.
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let args = Args {
+            dir: dir.to_str().unwrap().to_string(),
+        };
+        let result = run(args);
+        assert!(result.is_ok(), "init should succeed in an empty directory");
+
+        let manifest_path = dir.join("forge-gen.toml");
+        assert!(manifest_path.exists(), "forge-gen.toml should be created");
+
+        let content = std::fs::read_to_string(&manifest_path).unwrap();
+        assert_eq!(content, STARTER_MANIFEST);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn init_refuses_overwrite() {
+        let dir = std::env::temp_dir().join("forge_gen_test_init_overwrite");
+        let _ = std::fs::create_dir_all(&dir);
+
+        // Create an existing forge-gen.toml so that init should refuse.
+        let manifest_path = dir.join("forge-gen.toml");
+        std::fs::write(&manifest_path, "# existing").unwrap();
+
+        let args = Args {
+            dir: dir.to_str().unwrap().to_string(),
+        };
+        let result = run(args);
+        assert!(result.is_err(), "init should refuse to overwrite existing file");
+
+        // Verify the original content was not changed.
+        let content = std::fs::read_to_string(&manifest_path).unwrap();
+        assert_eq!(content, "# existing");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

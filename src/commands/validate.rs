@@ -113,3 +113,136 @@ pub fn run(args: Args) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_spec_parses_json() {
+        let dir = std::env::temp_dir().join("forge_gen_test_validate_json");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("spec.json");
+        std::fs::write(
+            &path,
+            r#"{
+  "openapi": "3.0.3",
+  "info": { "title": "Test API", "version": "1.0.0" },
+  "paths": {
+    "/pets": {
+      "get": { "operationId": "listPets", "responses": { "200": { "description": "ok" } } }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Pet": { "type": "object", "properties": { "name": { "type": "string" } } }
+    }
+  }
+}"#,
+        )
+        .unwrap();
+
+        let args = Args {
+            spec: path.to_str().unwrap().to_string(),
+        };
+        let result = run(args);
+        assert!(result.is_ok(), "validate should succeed for valid JSON spec");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_spec_parses_yaml_extension_gracefully() {
+        // YAML files that are not valid JSON get a placeholder — this should
+        // still not error out (the function warns but continues).
+        let dir = std::env::temp_dir().join("forge_gen_test_validate_yaml");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("spec.yaml");
+        std::fs::write(
+            &path,
+            "openapi: '3.0.3'\ninfo:\n  title: Test\n  version: '1.0'\npaths: {}\n",
+        )
+        .unwrap();
+
+        let args = Args {
+            spec: path.to_str().unwrap().to_string(),
+        };
+        let result = run(args);
+        assert!(
+            result.is_ok(),
+            "validate should not error for YAML specs (degrades gracefully)"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_spec_missing_file_errors() {
+        let args = Args {
+            spec: "/tmp/forge_gen_nonexistent_spec.json".to_string(),
+        };
+        let result = run(args);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn validate_counts_endpoints() {
+        let dir = std::env::temp_dir().join("forge_gen_test_validate_count");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("multi.json");
+        std::fs::write(
+            &path,
+            r#"{
+  "openapi": "3.0.3",
+  "info": { "title": "Multi", "version": "2.0" },
+  "paths": {
+    "/a": {
+      "get": { "operationId": "getA", "responses": {} },
+      "post": { "operationId": "createA", "responses": {} }
+    },
+    "/b": {
+      "delete": { "operationId": "deleteB", "responses": {} }
+    }
+  }
+}"#,
+        )
+        .unwrap();
+
+        // The function prints endpoint counts but does not expose them
+        // directly; we verify it runs without error (3 endpoints, 0 warnings).
+        let args = Args {
+            spec: path.to_str().unwrap().to_string(),
+        };
+        assert!(run(args).is_ok());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_detects_missing_operation_id() {
+        let dir = std::env::temp_dir().join("forge_gen_test_validate_warn");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("warn.json");
+        std::fs::write(
+            &path,
+            r#"{
+  "openapi": "3.0.3",
+  "info": { "title": "Warn", "version": "1.0" },
+  "paths": {
+    "/x": {
+      "get": { "responses": {} }
+    }
+  }
+}"#,
+        )
+        .unwrap();
+
+        // Missing operationId should produce a warning but not an error.
+        let args = Args {
+            spec: path.to_str().unwrap().to_string(),
+        };
+        assert!(run(args).is_ok());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

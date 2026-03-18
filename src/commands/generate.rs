@@ -10,6 +10,67 @@ use tokio::task::JoinSet;
 use crate::manifest::{self, GenerateConfig};
 use crate::registry::{self, Category};
 
+// ── TaskRunner trait ─────────────────────────────────────────────────────────
+
+/// Common interface for all generator task types, allowing a single generic
+/// `run_task` function to replace the five per-category runner functions.
+trait TaskRunner: Send + 'static {
+    /// Human-readable target name (e.g. "go", "terraform", "skim-tab").
+    fn name(&self) -> &str;
+    /// Category label for display (e.g. "sdk", "iac", "helm", "mcp", "completion").
+    fn category(&self) -> &str;
+    /// Directory where output is written.
+    fn output_dir(&self) -> &str;
+    /// Name of the binary to invoke (e.g. "openapi-generator-cli", "iac-forge").
+    fn binary_name(&self) -> &str;
+    /// Build the full argument list for the subprocess.
+    fn build_args(&self) -> Vec<String>;
+}
+
+/// Execute any task that implements [`TaskRunner`] as an async subprocess.
+async fn run_task(task: impl TaskRunner) -> Result<TaskResult> {
+    println!(
+        "  {} [{}/{}] {} {}",
+        "->".green(),
+        task.category(),
+        task.name(),
+        task.binary_name(),
+        task.name(),
+    );
+
+    std::fs::create_dir_all(task.output_dir())?;
+
+    let bin = which::which(task.binary_name()).ok();
+
+    let success = if let Some(bin) = bin {
+        let mut cmd = Command::new(bin);
+        for arg in task.build_args() {
+            cmd.arg(arg);
+        }
+        let status = cmd
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .status()
+            .await
+            .with_context(|| format!("spawning {} for {}", task.binary_name(), task.name()))?;
+        status.success()
+    } else {
+        tracing::warn!(
+            target = task.name(),
+            "{} not found in PATH — skipping",
+            task.binary_name()
+        );
+        false
+    };
+
+    Ok(TaskResult {
+        name: task.name().to_string(),
+        category: task.category().to_string(),
+        output_dir: task.output_dir().to_string(),
+        success,
+    })
+}
+
 #[derive(Debug, ClapArgs)]
 pub struct Args {
     /// Path to an OpenAPI spec (YAML or JSON)
@@ -150,35 +211,35 @@ pub async fn run(args: Args) -> Result<()> {
 
         for name in &sdks {
             let task = build_openapi_task(name, "sdk", &config);
-            set.spawn(run_openapi_generator(task));
+            set.spawn(run_task(task));
         }
         for name in &servers {
             let task = build_openapi_task(name, "server", &config);
-            set.spawn(run_openapi_generator(task));
+            set.spawn(run_task(task));
         }
         for name in &schemas {
             let task = build_openapi_task(name, "schema", &config);
-            set.spawn(run_openapi_generator(task));
+            set.spawn(run_task(task));
         }
         for name in &docs {
             let task = build_openapi_task(name, "doc", &config);
-            set.spawn(run_openapi_generator(task));
+            set.spawn(run_task(task));
         }
         for name in &iac_backends {
             let task = build_iac_task(name, &config);
-            set.spawn(run_iac_generator(task));
+            set.spawn(run_task(task));
         }
         for name in &helm_targets {
             let task = build_helm_task(name, &config);
-            set.spawn(run_helm_generator(task));
+            set.spawn(run_task(task));
         }
         for name in &mcp_targets {
             let task = build_mcp_task(name, &config);
-            set.spawn(run_mcp_generator(task));
+            set.spawn(run_task(task));
         }
         for name in &completion_targets {
             let task = build_completion_task(name, &config);
-            set.spawn(run_completion_generator(task));
+            set.spawn(run_task(task));
         }
 
         while let Some(res) = set.join_next().await {
@@ -187,35 +248,35 @@ pub async fn run(args: Args) -> Result<()> {
     } else {
         for name in &sdks {
             let task = build_openapi_task(name, "sdk", &config);
-            results.push(run_openapi_generator(task).await?);
+            results.push(run_task(task).await?);
         }
         for name in &servers {
             let task = build_openapi_task(name, "server", &config);
-            results.push(run_openapi_generator(task).await?);
+            results.push(run_task(task).await?);
         }
         for name in &schemas {
             let task = build_openapi_task(name, "schema", &config);
-            results.push(run_openapi_generator(task).await?);
+            results.push(run_task(task).await?);
         }
         for name in &docs {
             let task = build_openapi_task(name, "doc", &config);
-            results.push(run_openapi_generator(task).await?);
+            results.push(run_task(task).await?);
         }
         for name in &iac_backends {
             let task = build_iac_task(name, &config);
-            results.push(run_iac_generator(task).await?);
+            results.push(run_task(task).await?);
         }
         for name in &helm_targets {
             let task = build_helm_task(name, &config);
-            results.push(run_helm_generator(task).await?);
+            results.push(run_task(task).await?);
         }
         for name in &mcp_targets {
             let task = build_mcp_task(name, &config);
-            results.push(run_mcp_generator(task).await?);
+            results.push(run_task(task).await?);
         }
         for name in &completion_targets {
             let task = build_completion_task(name, &config);
-            results.push(run_completion_generator(task).await?);
+            results.push(run_task(task).await?);
         }
     }
 
@@ -295,13 +356,23 @@ struct OpenApiTask {
     output_dir: String,
 }
 
-/// Describes an iac-forge invocation.
-struct IacTask {
-    name: String,
-    spec: String,
-    output_dir: String,
-    resources: Option<String>,
-    provider: Option<String>,
+impl TaskRunner for OpenApiTask {
+    fn name(&self) -> &str { &self.name }
+    fn category(&self) -> &str { &self.category }
+    fn output_dir(&self) -> &str { &self.output_dir }
+    fn binary_name(&self) -> &str { "openapi-generator-cli" }
+
+    fn build_args(&self) -> Vec<String> {
+        vec![
+            String::from("generate"),
+            String::from("-i"),
+            self.spec.clone(),
+            String::from("-g"),
+            self.generator.clone(),
+            String::from("-o"),
+            self.output_dir.clone(),
+        ]
+    }
 }
 
 fn build_openapi_task(name: &str, category: &str, config: &GenerateConfig) -> OpenApiTask {
@@ -318,6 +389,43 @@ fn build_openapi_task(name: &str, category: &str, config: &GenerateConfig) -> Op
     }
 }
 
+/// Describes an iac-forge invocation.
+struct IacTask {
+    name: String,
+    spec: String,
+    output_dir: String,
+    resources: Option<String>,
+    provider: Option<String>,
+}
+
+impl TaskRunner for IacTask {
+    fn name(&self) -> &str { &self.name }
+    fn category(&self) -> &str { "iac" }
+    fn output_dir(&self) -> &str { &self.output_dir }
+    fn binary_name(&self) -> &str { "iac-forge" }
+
+    fn build_args(&self) -> Vec<String> {
+        let mut args = vec![
+            String::from("generate"),
+            String::from("--backend"),
+            self.name.clone(),
+            String::from("--spec"),
+            self.spec.clone(),
+            String::from("--output"),
+            self.output_dir.clone(),
+        ];
+        if let Some(ref resources) = self.resources {
+            args.push(String::from("--resources"));
+            args.push(resources.clone());
+        }
+        if let Some(ref provider) = self.provider {
+            args.push(String::from("--provider"));
+            args.push(provider.clone());
+        }
+        args
+    }
+}
+
 fn build_iac_task(name: &str, config: &GenerateConfig) -> IacTask {
     let out = format!("{}/iac/{name}", config.output_dir);
 
@@ -330,108 +438,6 @@ fn build_iac_task(name: &str, config: &GenerateConfig) -> IacTask {
     }
 }
 
-async fn run_openapi_generator(task: OpenApiTask) -> Result<TaskResult> {
-    println!(
-        "  {} [{}/{}] openapi-generator-cli -g {}",
-        "->".green(),
-        task.category,
-        task.name,
-        task.generator,
-    );
-
-    std::fs::create_dir_all(&task.output_dir)?;
-
-    let bin = which::which("openapi-generator-cli").ok();
-
-    let success = if let Some(bin) = bin {
-        let status = Command::new(bin)
-            .args([
-                "generate",
-                "-i",
-                &task.spec,
-                "-g",
-                &task.generator,
-                "-o",
-                &task.output_dir,
-            ])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::piped())
-            .status()
-            .await
-            .with_context(|| format!("spawning openapi-generator-cli for {}", task.name))?;
-
-        status.success()
-    } else {
-        tracing::warn!(
-            target = task.name,
-            "openapi-generator-cli not found in PATH — skipping"
-        );
-        false
-    };
-
-    Ok(TaskResult {
-        name: task.name,
-        category: task.category,
-        output_dir: task.output_dir,
-        success,
-    })
-}
-
-async fn run_iac_generator(task: IacTask) -> Result<TaskResult> {
-    println!(
-        "  {} [iac/{}] iac-forge generate --backend {}",
-        "->".green(),
-        task.name,
-        task.name,
-    );
-
-    std::fs::create_dir_all(&task.output_dir)?;
-
-    let bin = which::which("iac-forge").ok();
-
-    let success = if let Some(bin) = bin {
-        let mut cmd = Command::new(bin);
-        cmd.args([
-            "generate",
-            "--backend",
-            &task.name,
-            "--spec",
-            &task.spec,
-            "--output",
-            &task.output_dir,
-        ]);
-
-        if let Some(ref resources) = task.resources {
-            cmd.args(["--resources", resources]);
-        }
-        if let Some(ref provider) = task.provider {
-            cmd.args(["--provider", provider]);
-        }
-
-        let status = cmd
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::piped())
-            .status()
-            .await
-            .with_context(|| format!("spawning iac-forge for {}", task.name))?;
-
-        status.success()
-    } else {
-        tracing::warn!(
-            target = task.name,
-            "iac-forge not found in PATH — skipping"
-        );
-        false
-    };
-
-    Ok(TaskResult {
-        name: task.name,
-        category: String::from("iac"),
-        output_dir: task.output_dir,
-        success,
-    })
-}
-
 /// Describes a helm-forge invocation (via iac-forge --backend helm).
 struct HelmTask {
     name: String,
@@ -439,6 +445,34 @@ struct HelmTask {
     output_dir: String,
     resources: Option<String>,
     provider: Option<String>,
+}
+
+impl TaskRunner for HelmTask {
+    fn name(&self) -> &str { &self.name }
+    fn category(&self) -> &str { "helm" }
+    fn output_dir(&self) -> &str { &self.output_dir }
+    fn binary_name(&self) -> &str { "iac-forge" }
+
+    fn build_args(&self) -> Vec<String> {
+        let mut args = vec![
+            String::from("generate"),
+            String::from("--backend"),
+            String::from("helm"),
+            String::from("--spec"),
+            self.spec.clone(),
+            String::from("--output"),
+            self.output_dir.clone(),
+        ];
+        if let Some(ref resources) = self.resources {
+            args.push(String::from("--resources"));
+            args.push(resources.clone());
+        }
+        if let Some(ref provider) = self.provider {
+            args.push(String::from("--provider"));
+            args.push(provider.clone());
+        }
+        args
+    }
 }
 
 fn build_helm_task(name: &str, config: &GenerateConfig) -> HelmTask {
@@ -453,66 +487,34 @@ fn build_helm_task(name: &str, config: &GenerateConfig) -> HelmTask {
     }
 }
 
-async fn run_helm_generator(task: HelmTask) -> Result<TaskResult> {
-    println!(
-        "  {} [helm/{}] iac-forge generate --backend helm",
-        "->".green(),
-        task.name,
-    );
-
-    std::fs::create_dir_all(&task.output_dir)?;
-
-    let bin = which::which("iac-forge").ok();
-
-    let success = if let Some(bin) = bin {
-        let mut cmd = Command::new(bin);
-        cmd.args([
-            "generate",
-            "--backend",
-            "helm",
-            "--spec",
-            &task.spec,
-            "--output",
-            &task.output_dir,
-        ]);
-
-        if let Some(ref resources) = task.resources {
-            cmd.args(["--resources", resources]);
-        }
-        if let Some(ref provider) = task.provider {
-            cmd.args(["--provider", provider]);
-        }
-
-        let status = cmd
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::piped())
-            .status()
-            .await
-            .with_context(|| format!("spawning iac-forge (helm) for {}", task.name))?;
-
-        status.success()
-    } else {
-        tracing::warn!(
-            target = task.name,
-            "iac-forge not found in PATH — skipping helm generation"
-        );
-        false
-    };
-
-    Ok(TaskResult {
-        name: task.name,
-        category: String::from("helm"),
-        output_dir: task.output_dir,
-        success,
-    })
-}
-
 /// Describes an mcp-forge invocation.
 struct McpTask {
     name: String,
     spec: String,
     output_dir: String,
     project_name: Option<String>,
+}
+
+impl TaskRunner for McpTask {
+    fn name(&self) -> &str { &self.name }
+    fn category(&self) -> &str { "mcp" }
+    fn output_dir(&self) -> &str { &self.output_dir }
+    fn binary_name(&self) -> &str { "mcp-forge" }
+
+    fn build_args(&self) -> Vec<String> {
+        let mut args = vec![
+            String::from("generate"),
+            String::from("--spec"),
+            self.spec.clone(),
+            String::from("--output"),
+            self.output_dir.clone(),
+        ];
+        if let Some(ref name) = self.project_name {
+            args.push(String::from("--name"));
+            args.push(name.clone());
+        }
+        args
+    }
 }
 
 fn build_mcp_task(name: &str, config: &GenerateConfig) -> McpTask {
@@ -526,55 +528,6 @@ fn build_mcp_task(name: &str, config: &GenerateConfig) -> McpTask {
     }
 }
 
-async fn run_mcp_generator(task: McpTask) -> Result<TaskResult> {
-    println!(
-        "  {} [mcp/{}] mcp-forge generate",
-        "->".green(),
-        task.name,
-    );
-
-    std::fs::create_dir_all(&task.output_dir)?;
-
-    let bin = which::which("mcp-forge").ok();
-
-    let success = if let Some(bin) = bin {
-        let mut cmd = Command::new(bin);
-        cmd.args([
-            "generate",
-            "--spec",
-            &task.spec,
-            "--output",
-            &task.output_dir,
-        ]);
-
-        if let Some(ref name) = task.project_name {
-            cmd.args(["--name", name]);
-        }
-
-        let status = cmd
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::piped())
-            .status()
-            .await
-            .with_context(|| format!("spawning mcp-forge for {}", task.name))?;
-
-        status.success()
-    } else {
-        tracing::warn!(
-            target = task.name,
-            "mcp-forge not found in PATH — skipping"
-        );
-        false
-    };
-
-    Ok(TaskResult {
-        name: task.name,
-        category: String::from("mcp"),
-        output_dir: task.output_dir,
-        success,
-    })
-}
-
 /// Describes a completion-forge invocation.
 struct CompletionTask {
     name: String,
@@ -585,6 +538,42 @@ struct CompletionTask {
     icon: Option<String>,
     grouping: Option<String>,
     aliases: Vec<String>,
+}
+
+impl TaskRunner for CompletionTask {
+    fn name(&self) -> &str { &self.name }
+    fn category(&self) -> &str { "completion" }
+    fn output_dir(&self) -> &str { &self.output_dir }
+    fn binary_name(&self) -> &str { "completion-forge" }
+
+    fn build_args(&self) -> Vec<String> {
+        let mut args = vec![
+            String::from("generate"),
+            String::from("--spec"),
+            self.spec.clone(),
+            String::from("--output"),
+            self.output_dir.clone(),
+            String::from("--format"),
+            self.format.clone(),
+        ];
+        if let Some(ref name) = self.project_name {
+            args.push(String::from("--name"));
+            args.push(name.clone());
+        }
+        if let Some(ref icon) = self.icon {
+            args.push(String::from("--icon"));
+            args.push(icon.clone());
+        }
+        if let Some(ref grouping) = self.grouping {
+            args.push(String::from("--grouping"));
+            args.push(grouping.clone());
+        }
+        if !self.aliases.is_empty() {
+            args.push(String::from("--aliases"));
+            args.push(self.aliases.join(","));
+        }
+        args
+    }
 }
 
 fn build_completion_task(name: &str, config: &GenerateConfig) -> CompletionTask {
@@ -600,67 +589,6 @@ fn build_completion_task(name: &str, config: &GenerateConfig) -> CompletionTask 
         grouping: config.completion_grouping.clone(),
         aliases: config.completion_aliases.clone(),
     }
-}
-
-async fn run_completion_generator(task: CompletionTask) -> Result<TaskResult> {
-    println!(
-        "  {} [completion/{}] completion-forge generate --format {}",
-        "->".green(),
-        task.name,
-        task.format,
-    );
-
-    std::fs::create_dir_all(&task.output_dir)?;
-
-    let bin = which::which("completion-forge").ok();
-
-    let success = if let Some(bin) = bin {
-        let mut cmd = Command::new(bin);
-        cmd.args([
-            "generate",
-            "--spec",
-            &task.spec,
-            "--output",
-            &task.output_dir,
-            "--format",
-            &task.format,
-        ]);
-
-        if let Some(ref name) = task.project_name {
-            cmd.args(["--name", name]);
-        }
-        if let Some(ref icon) = task.icon {
-            cmd.args(["--icon", icon]);
-        }
-        if let Some(ref grouping) = task.grouping {
-            cmd.args(["--grouping", grouping]);
-        }
-        if !task.aliases.is_empty() {
-            cmd.args(["--aliases", &task.aliases.join(",")]);
-        }
-
-        let status = cmd
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::piped())
-            .status()
-            .await
-            .with_context(|| format!("spawning completion-forge for {}", task.name))?;
-
-        status.success()
-    } else {
-        tracing::warn!(
-            target = task.name,
-            "completion-forge not found in PATH — skipping"
-        );
-        false
-    };
-
-    Ok(TaskResult {
-        name: task.name,
-        category: String::from("completion"),
-        output_dir: task.output_dir,
-        success,
-    })
 }
 
 #[cfg(test)]
@@ -747,5 +675,206 @@ mod tests {
         assert_eq!(task.project_name.as_deref(), Some("my-tool"));
         assert_eq!(task.icon.as_deref(), Some("\u{2601}"));
         assert_eq!(task.aliases, vec!["mt"]);
+    }
+
+    // ── TaskRunner trait tests ─────────────────────────────────────────────
+
+    #[test]
+    fn openapi_task_runner_fields() {
+        let task = OpenApiTask {
+            name: "go".to_string(),
+            generator: "go".to_string(),
+            category: "sdk".to_string(),
+            spec: "api.yaml".to_string(),
+            output_dir: "./out/sdk/go".to_string(),
+        };
+        assert_eq!(task.name(), "go");
+        assert_eq!(task.category(), "sdk");
+        assert_eq!(task.output_dir(), "./out/sdk/go");
+        assert_eq!(task.binary_name(), "openapi-generator-cli");
+    }
+
+    #[test]
+    fn openapi_task_build_args() {
+        let task = OpenApiTask {
+            name: "python".to_string(),
+            generator: "python".to_string(),
+            category: "sdk".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out/sdk/python".to_string(),
+        };
+        let args = task.build_args();
+        assert_eq!(
+            args,
+            vec!["generate", "-i", "spec.yaml", "-g", "python", "-o", "./out/sdk/python"]
+        );
+    }
+
+    #[test]
+    fn iac_task_runner_fields() {
+        let task = IacTask {
+            name: "terraform".to_string(),
+            spec: "api.yaml".to_string(),
+            output_dir: "./out/iac/terraform".to_string(),
+            resources: None,
+            provider: None,
+        };
+        assert_eq!(task.name(), "terraform");
+        assert_eq!(task.category(), "iac");
+        assert_eq!(task.binary_name(), "iac-forge");
+    }
+
+    #[test]
+    fn iac_task_build_args_minimal() {
+        let task = IacTask {
+            name: "pulumi".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out/iac/pulumi".to_string(),
+            resources: None,
+            provider: None,
+        };
+        let args = task.build_args();
+        assert_eq!(
+            args,
+            vec!["generate", "--backend", "pulumi", "--spec", "spec.yaml", "--output", "./out/iac/pulumi"]
+        );
+    }
+
+    #[test]
+    fn iac_task_build_args_with_resources_and_provider() {
+        let task = IacTask {
+            name: "terraform".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out/iac/terraform".to_string(),
+            resources: Some("./res".to_string()),
+            provider: Some("./prov.toml".to_string()),
+        };
+        let args = task.build_args();
+        assert_eq!(
+            args,
+            vec![
+                "generate", "--backend", "terraform", "--spec", "spec.yaml",
+                "--output", "./out/iac/terraform",
+                "--resources", "./res",
+                "--provider", "./prov.toml",
+            ]
+        );
+    }
+
+    #[test]
+    fn helm_task_runner_fields() {
+        let task = HelmTask {
+            name: "helm".to_string(),
+            spec: "api.yaml".to_string(),
+            output_dir: "./out/helm/helm".to_string(),
+            resources: None,
+            provider: None,
+        };
+        assert_eq!(task.name(), "helm");
+        assert_eq!(task.category(), "helm");
+        assert_eq!(task.binary_name(), "iac-forge");
+    }
+
+    #[test]
+    fn helm_task_build_args_uses_helm_backend() {
+        let task = HelmTask {
+            name: "helm".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out/helm/helm".to_string(),
+            resources: Some("./r".to_string()),
+            provider: None,
+        };
+        let args = task.build_args();
+        assert!(args.contains(&String::from("helm")));
+        assert_eq!(args[2], "helm"); // --backend helm
+        assert!(args.contains(&String::from("--resources")));
+    }
+
+    #[test]
+    fn mcp_task_runner_fields() {
+        let task = McpTask {
+            name: "mcp-rust".to_string(),
+            spec: "api.yaml".to_string(),
+            output_dir: "./out/mcp/mcp-rust".to_string(),
+            project_name: None,
+        };
+        assert_eq!(task.name(), "mcp-rust");
+        assert_eq!(task.category(), "mcp");
+        assert_eq!(task.binary_name(), "mcp-forge");
+    }
+
+    #[test]
+    fn mcp_task_build_args_with_name() {
+        let task = McpTask {
+            name: "mcp-rust".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out/mcp/mcp-rust".to_string(),
+            project_name: Some("my-api".to_string()),
+        };
+        let args = task.build_args();
+        assert_eq!(
+            args,
+            vec!["generate", "--spec", "spec.yaml", "--output", "./out/mcp/mcp-rust", "--name", "my-api"]
+        );
+    }
+
+    #[test]
+    fn completion_task_runner_fields() {
+        let task = CompletionTask {
+            name: "fish".to_string(),
+            format: "fish".to_string(),
+            spec: "api.yaml".to_string(),
+            output_dir: "./out/completion/fish".to_string(),
+            project_name: None,
+            icon: None,
+            grouping: None,
+            aliases: vec![],
+        };
+        assert_eq!(task.name(), "fish");
+        assert_eq!(task.category(), "completion");
+        assert_eq!(task.binary_name(), "completion-forge");
+    }
+
+    #[test]
+    fn completion_task_build_args_full() {
+        let task = CompletionTask {
+            name: "skim-tab".to_string(),
+            format: "skim-tab".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out/completion/skim-tab".to_string(),
+            project_name: Some("my-tool".to_string()),
+            icon: Some("*".to_string()),
+            grouping: Some("tag".to_string()),
+            aliases: vec!["mt".to_string(), "tool".to_string()],
+        };
+        let args = task.build_args();
+        assert_eq!(
+            args,
+            vec![
+                "generate", "--spec", "spec.yaml", "--output", "./out/completion/skim-tab",
+                "--format", "skim-tab", "--name", "my-tool",
+                "--icon", "*", "--grouping", "tag",
+                "--aliases", "mt,tool",
+            ]
+        );
+    }
+
+    #[test]
+    fn completion_task_build_args_minimal() {
+        let task = CompletionTask {
+            name: "fish".to_string(),
+            format: "fish".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out/completion/fish".to_string(),
+            project_name: None,
+            icon: None,
+            grouping: None,
+            aliases: vec![],
+        };
+        let args = task.build_args();
+        assert_eq!(
+            args,
+            vec!["generate", "--spec", "spec.yaml", "--output", "./out/completion/fish", "--format", "fish"]
+        );
     }
 }

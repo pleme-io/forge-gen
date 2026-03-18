@@ -4,7 +4,7 @@
 
 ```bash
 cargo build
-cargo test           # 74 tests
+cargo test           # 100 tests
 cargo run -- generate --spec openapi.yaml --sdks rust,go --mcp mcp-rust
 cargo run -- list    # show all registered generators
 cargo run -- list --category completion  # filter by category
@@ -32,12 +32,12 @@ Invokes external tools (openapi-generator-cli, iac-forge, mcp-forge, completion-
 
 | Module | Purpose |
 |--------|---------|
-| `commands/generate.rs` | Generate command: parallel task dispatch to external tools |
+| `commands/generate.rs` | `TaskRunner` trait + `execute_task()`, parallel/sequential dispatch via `JoinSet` |
 | `commands/list.rs` | List all registered generators with categories |
 | `commands/init.rs` | Create starter `forge-gen.toml` manifest |
 | `commands/validate.rs` | Parse and summarize OpenAPI spec |
-| `manifest.rs` | `forge-gen.toml` manifest loading + CLI merge |
-| `registry.rs` | Static generator registry (63 generators across 8 categories) |
+| `manifest.rs` | `forge-gen.toml` manifest loading + CLI merge, `HasTargets` trait for generic CSV parsing |
+| `registry.rs` | Static generator registry (51 generators across 8 categories), `Category` with `FromStr + Display` |
 
 ### CLI Flags
 
@@ -89,5 +89,7 @@ aliases = ["mt"]
 
 - **External tool dispatch** — does NOT embed generators; invokes `openapi-generator-cli`, `iac-forge`, `mcp-forge`, `completion-forge` as subprocesses
 - **Parallel by default** — JoinSet-based concurrent execution
-- **Registry is static** — all generators known at compile time (63 total across 8 categories)
+- **TaskRunner trait** — single `execute_task()` eliminates boilerplate across 5 generator types
+- **HasTargets trait** — generic `parse_csv_or<T>()` replaces 5 duplicated CSV parsers
+- **Registry is static** — all generators known at compile time (51 total across 8 categories)
 - **Nix build** — substrate `rust-tool-release-flake.nix` pattern

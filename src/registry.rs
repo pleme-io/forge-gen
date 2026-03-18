@@ -47,7 +47,7 @@ impl fmt::Display for Category {
 }
 
 /// Metadata for a single generator target.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GeneratorInfo {
     /// Friendly name used on the CLI (e.g. "go", "typescript-axios").
     pub name: &'static str,

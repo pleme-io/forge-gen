@@ -1287,4 +1287,108 @@ backends = []
         let config = merge_with_cli(Some(&manifest), &cli);
         assert!(config.iac_backends.is_empty());
     }
+
+    // ── cli_or_manifest helper ──────────────────────────────────────────
+
+    #[test]
+    fn cli_or_manifest_cli_wins() {
+        let cli_val = String::from("cli");
+        let manifest = Manifest::default();
+        let result = cli_or_manifest(Some(&cli_val), Some(&manifest), |_| {
+            Some(String::from("manifest"))
+        });
+        assert_eq!(result.as_deref(), Some("cli"));
+    }
+
+    #[test]
+    fn cli_or_manifest_fallback_to_manifest() {
+        let manifest = Manifest::default();
+        let result = cli_or_manifest(None, Some(&manifest), |_| {
+            Some(String::from("manifest"))
+        });
+        assert_eq!(result.as_deref(), Some("manifest"));
+    }
+
+    #[test]
+    fn cli_or_manifest_both_none() {
+        let result =
+            cli_or_manifest(None, None, |_: &Manifest| -> Option<String> { unreachable!() });
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn cli_or_manifest_manifest_returns_none() {
+        let manifest = Manifest::default();
+        let result = cli_or_manifest(None, Some(&manifest), |_| None);
+        assert!(result.is_none());
+    }
+
+    // ── resolve_completion_fields helper ─────────────────────────────────
+
+    #[test]
+    fn resolve_completion_fields_from_manifest() {
+        let manifest: Manifest = toml::from_str(
+            r#"
+[completions]
+targets = ["skim-tab"]
+name = "tool"
+icon = "★"
+grouping = "tag"
+aliases = ["t"]
+"#,
+        )
+        .unwrap();
+        let cli = empty_cli();
+        let (name, icon, grouping, aliases) = resolve_completion_fields(Some(&manifest), &cli);
+        assert_eq!(name.as_deref(), Some("tool"));
+        assert_eq!(icon.as_deref(), Some("★"));
+        assert_eq!(grouping.as_deref(), Some("tag"));
+        assert_eq!(aliases, vec!["t"]);
+    }
+
+    #[test]
+    fn resolve_completion_fields_cli_name_overrides() {
+        let manifest: Manifest = toml::from_str(
+            r#"
+[completions]
+targets = ["skim-tab"]
+name = "manifest-name"
+"#,
+        )
+        .unwrap();
+        let mut cli = empty_cli();
+        cli.completion_name = Some(String::from("cli-name"));
+        let (name, _, _, _) = resolve_completion_fields(Some(&manifest), &cli);
+        assert_eq!(name.as_deref(), Some("cli-name"));
+    }
+
+    #[test]
+    fn resolve_completion_fields_no_manifest() {
+        let cli = empty_cli();
+        let (name, icon, grouping, aliases) = resolve_completion_fields(None, &cli);
+        assert!(name.is_none());
+        assert!(icon.is_none());
+        assert!(grouping.is_none());
+        assert!(aliases.is_empty());
+    }
+
+    // ── BTreeMap ordering in overrides ───────────────────────────────────
+
+    #[test]
+    fn overrides_use_btreemap_deterministic_order() {
+        let toml_str = r#"
+[sdks]
+targets = ["go", "python"]
+
+[sdks.overrides.python]
+packageName = "pyapi"
+
+[sdks.overrides.go]
+packageName = "goapi"
+"#;
+        let m: Manifest = toml::from_str(toml_str).unwrap();
+        let overrides = m.sdks.as_ref().unwrap()._overrides.as_ref().unwrap();
+        let keys: Vec<&String> = overrides.keys().collect();
+        assert_eq!(keys, vec!["go", "python"], "BTreeMap should sort keys");
+    }
 }

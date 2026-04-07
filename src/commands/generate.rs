@@ -1196,6 +1196,148 @@ mod tests {
         assert!(args.contains(&"f".to_string()));
     }
 
+    // ── build_completion_task edge cases ───────────────────────────────
+
+    #[test]
+    fn build_completion_task_output_dir_format() {
+        let config = make_config();
+        let task = build_completion_task("fish", &config);
+        assert_eq!(task.output_dir, "./out/completion/fish");
+    }
+
+    #[test]
+    fn build_completion_task_no_optional_fields() {
+        let config = make_config();
+        let task = build_completion_task("skim-tab", &config);
+        assert!(task.project_name.is_none());
+        assert!(task.icon.is_none());
+        assert!(task.grouping.is_none());
+        assert!(task.aliases.is_empty());
+    }
+
+    // ── openapi_task generator mapping ──────────────────────────────────
+
+    #[test]
+    fn build_openapi_task_swift_maps_to_swift6() {
+        let config = make_config();
+        let task = build_openapi_task("swift", "sdk", &config);
+        assert_eq!(task.generator, "swift6");
+    }
+
+    #[test]
+    fn build_openapi_task_scala_maps_to_sttp() {
+        let config = make_config();
+        let task = build_openapi_task("scala", "sdk", &config);
+        assert_eq!(task.generator, "scala-sttp");
+    }
+
+    #[test]
+    fn build_openapi_task_haskell_maps_to_http_client() {
+        let config = make_config();
+        let task = build_openapi_task("haskell", "sdk", &config);
+        assert_eq!(task.generator, "haskell-http-client");
+    }
+
+    #[test]
+    fn build_openapi_task_cpp_maps_to_restsdk() {
+        let config = make_config();
+        let task = build_openapi_task("cpp", "sdk", &config);
+        assert_eq!(task.generator, "cpp-restsdk");
+    }
+
+    // ── resolve_targets for every category ──────────────────────────────
+
+    #[test]
+    fn resolve_targets_all_server_returns_5() {
+        let result = resolve_targets(&["all".to_string()], Category::Server);
+        assert_eq!(result.len(), 5);
+    }
+
+    #[test]
+    fn resolve_targets_all_schema_returns_4() {
+        let result = resolve_targets(&["all".to_string()], Category::Schema);
+        assert_eq!(result.len(), 4);
+    }
+
+    #[test]
+    fn resolve_targets_all_doc_returns_4() {
+        let result = resolve_targets(&["all".to_string()], Category::Doc);
+        assert_eq!(result.len(), 4);
+    }
+
+    #[test]
+    fn resolve_targets_all_mcp_returns_1() {
+        let result = resolve_targets(&["all".to_string()], Category::Mcp);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], "mcp-rust");
+    }
+
+    #[test]
+    fn resolve_targets_all_completion_returns_2() {
+        let result = resolve_targets(&["all".to_string()], Category::Completion);
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn resolve_targets_all_helm_returns_1() {
+        let result = resolve_targets(&["all".to_string()], Category::Helm);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], "helm");
+    }
+
+    #[test]
+    fn resolve_targets_multiple_specific() {
+        let input = vec![
+            "terraform".to_string(),
+            "pulumi".to_string(),
+            "crossplane".to_string(),
+        ];
+        let result = resolve_targets(&input, Category::Iac);
+        assert_eq!(result, input);
+    }
+
+    // ── TaskRunner trait contract ────────────────────────────────────────
+
+    #[test]
+    fn all_task_types_implement_correct_binary_names() {
+        let config = make_config();
+
+        let openapi = build_openapi_task("go", "sdk", &config);
+        assert_eq!(openapi.binary_name(), "openapi-generator-cli");
+
+        let iac = build_iac_task("terraform", &config);
+        assert_eq!(iac.binary_name(), "iac-forge");
+
+        let helm = build_helm_task("helm", &config);
+        assert_eq!(helm.binary_name(), "iac-forge");
+
+        let mcp = build_mcp_task("mcp-rust", &config);
+        assert_eq!(mcp.binary_name(), "mcp-forge");
+
+        let comp = build_completion_task("fish", &config);
+        assert_eq!(comp.binary_name(), "completion-forge");
+    }
+
+    #[test]
+    fn all_task_types_implement_correct_categories() {
+        let config = make_config();
+
+        let openapi = build_openapi_task("go", "sdk", &config);
+        assert_eq!(openapi.category(), "sdk");
+
+        let iac = build_iac_task("terraform", &config);
+        assert_eq!(iac.category(), "iac");
+
+        let helm = build_helm_task("helm", &config);
+        assert_eq!(helm.category(), "helm");
+
+        let mcp = build_mcp_task("mcp-rust", &config);
+        assert_eq!(mcp.category(), "mcp");
+
+        let comp = build_completion_task("fish", &config);
+        assert_eq!(comp.category(), "completion");
+    }
+
     // ── Helper ──────────────────────────────────────────────────────────
 
     fn make_config() -> GenerateConfig {

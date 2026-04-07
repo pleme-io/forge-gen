@@ -86,7 +86,7 @@ targets = ["go", "python", "typescript"]
 /// # Errors
 ///
 /// Returns an error if the file already exists or cannot be written.
-pub fn run(args: Args) -> Result<()> {
+pub fn run(args: &Args) -> Result<()> {
     let dest = Path::new(&args.dir).join("forge-gen.toml");
 
     if dest.exists() {
@@ -133,7 +133,7 @@ mod tests {
         let args = Args {
             dir: dir.to_str().unwrap().to_string(),
         };
-        let result = run(args);
+        let result = run(&args);
         assert!(result.is_ok(), "init should succeed in an empty directory");
 
         let manifest_path = dir.join("forge-gen.toml");
@@ -156,7 +156,7 @@ mod tests {
         let args = Args {
             dir: dir.to_str().unwrap().to_string(),
         };
-        let result = run(args);
+        let result = run(&args);
         assert!(result.is_err(), "init should refuse to overwrite existing file");
 
         let content = std::fs::read_to_string(&manifest_path).unwrap();
@@ -202,7 +202,7 @@ mod tests {
             dir: dir.to_str().unwrap().to_string(),
         };
         assert!(
-            run(args).is_ok(),
+            run(&args).is_ok(),
             "init should create nested directories"
         );
         assert!(dir.join("forge-gen.toml").exists());
@@ -221,7 +221,7 @@ mod tests {
         let args = Args {
             dir: dir.to_str().unwrap().to_string(),
         };
-        let err = run(args).unwrap_err();
+        let err = run(&args).unwrap_err();
         let msg = err.to_string();
         assert!(
             msg.contains("already exists"),

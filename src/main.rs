@@ -23,13 +23,13 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Generate code from an OpenAPI spec (SDKs, servers, IaC, schemas, docs)
-    Generate(commands::generate::Args),
+    /// Generate code from an `OpenAPI` spec (SDKs, servers, `IaC`, schemas, docs)
+    Generate(Box<commands::generate::Args>),
 
     /// List all available generators by category
     List(commands::list::Args),
 
-    /// Validate an OpenAPI spec and print a summary
+    /// Validate an `OpenAPI` spec and print a summary
     Validate(commands::validate::Args),
 
     /// Create a starter forge-gen.toml manifest in the current directory
@@ -52,10 +52,10 @@ async fn main() -> ExitCode {
 
 async fn run(cmd: Command) -> anyhow::Result<()> {
     match cmd {
-        Command::Generate(args) => commands::generate::run(args).await,
-        Command::List(args) => commands::list::run(args),
-        Command::Validate(args) => commands::validate::run(args),
-        Command::Init(args) => commands::init::run(args),
+        Command::Generate(args) => commands::generate::run(*args).await,
+        Command::List(args) => commands::list::run(&args),
+        Command::Validate(args) => commands::validate::run(&args),
+        Command::Init(args) => commands::init::run(&args),
     }
 }
 

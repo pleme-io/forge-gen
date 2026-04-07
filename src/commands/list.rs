@@ -15,7 +15,7 @@ pub struct Args {
 /// # Errors
 ///
 /// Returns an error if the filter category is unrecognised.
-pub fn run(args: Args) -> anyhow::Result<()> {
+pub fn run(args: &Args) -> anyhow::Result<()> {
     let categories: Vec<Category> = if let Some(ref filter) = args.category {
         vec![parse_category(filter)?]
     } else {
@@ -38,7 +38,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         }
 
         println!("\n  {} ({})", format!("{cat}").bold(), generators.len());
-        println!("  {:<24} {:<26} {}", "Name", "Generator", "Description");
+        println!("  {:<24} {:<26} Description", "Name", "Generator");
         println!("  {}", "-".repeat(74));
 
         for g in &generators {
@@ -64,7 +64,7 @@ mod tests {
     #[test]
     fn run_no_filter_lists_all_categories() {
         let args = Args { category: None };
-        let result = run(args);
+        let result = run(&args);
         assert!(result.is_ok(), "list with no filter should succeed");
     }
 
@@ -73,7 +73,7 @@ mod tests {
         let args = Args {
             category: Some("sdk".to_string()),
         };
-        assert!(run(args).is_ok());
+        assert!(run(&args).is_ok());
     }
 
     #[test]
@@ -81,7 +81,7 @@ mod tests {
         let args = Args {
             category: Some("server".to_string()),
         };
-        assert!(run(args).is_ok());
+        assert!(run(&args).is_ok());
     }
 
     #[test]
@@ -89,7 +89,7 @@ mod tests {
         let args = Args {
             category: Some("iac".to_string()),
         };
-        assert!(run(args).is_ok());
+        assert!(run(&args).is_ok());
     }
 
     #[test]
@@ -97,7 +97,7 @@ mod tests {
         let args = Args {
             category: Some("schema".to_string()),
         };
-        assert!(run(args).is_ok());
+        assert!(run(&args).is_ok());
     }
 
     #[test]
@@ -105,7 +105,7 @@ mod tests {
         let args = Args {
             category: Some("doc".to_string()),
         };
-        assert!(run(args).is_ok());
+        assert!(run(&args).is_ok());
     }
 
     #[test]
@@ -113,7 +113,7 @@ mod tests {
         let args = Args {
             category: Some("helm".to_string()),
         };
-        assert!(run(args).is_ok());
+        assert!(run(&args).is_ok());
     }
 
     #[test]
@@ -121,7 +121,7 @@ mod tests {
         let args = Args {
             category: Some("mcp".to_string()),
         };
-        assert!(run(args).is_ok());
+        assert!(run(&args).is_ok());
     }
 
     #[test]
@@ -129,7 +129,7 @@ mod tests {
         let args = Args {
             category: Some("completion".to_string()),
         };
-        assert!(run(args).is_ok());
+        assert!(run(&args).is_ok());
     }
 
     #[test]
@@ -137,7 +137,7 @@ mod tests {
         let args = Args {
             category: Some("bogus".to_string()),
         };
-        let result = run(args);
+        let result = run(&args);
         assert!(result.is_err(), "invalid category should produce an error");
     }
 
@@ -146,7 +146,7 @@ mod tests {
         let args = Args {
             category: Some(String::new()),
         };
-        assert!(run(args).is_err());
+        assert!(run(&args).is_err());
     }
 
     #[test]

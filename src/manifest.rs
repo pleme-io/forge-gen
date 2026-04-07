@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -44,7 +44,7 @@ pub struct CompletionConfig {
     pub icon: Option<String>,
     /// Grouping strategy: auto, tag, path, or operation-id
     pub grouping: Option<String>,
-    /// Command aliases (e.g., ["ps", "pet"])
+    /// Command aliases (e.g., `["ps", "pet"]`)
     #[serde(default)]
     pub aliases: Vec<String>,
 }
@@ -65,7 +65,7 @@ pub struct OutputConfig {
 pub struct TargetList {
     pub targets: Vec<String>,
     #[serde(default, rename = "overrides")]
-    pub _overrides: Option<HashMap<String, HashMap<String, String>>>,
+    pub _overrides: Option<BTreeMap<String, BTreeMap<String, String>>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -111,158 +111,76 @@ pub fn load(path: &Path) -> Result<Manifest> {
     toml::from_str(&content).with_context(|| format!("parsing {}", path.display()))
 }
 
+/// Pick the CLI value if set, otherwise extract from the manifest via `f`.
+fn cli_or_manifest<F>(cli_value: Option<&String>, manifest: Option<&Manifest>, f: F) -> Option<String>
+where
+    F: FnOnce(&Manifest) -> Option<String>,
+{
+    cli_value.cloned().or_else(|| manifest.and_then(f))
+}
+
+/// Resolve the completion-specific fields from the manifest.
+fn resolve_completion_fields(manifest: Option<&Manifest>, cli: &CliArgs) -> (Option<String>, Option<String>, Option<String>, Vec<String>) {
+    let name = cli_or_manifest(cli.completion_name.as_ref(), manifest, |m| {
+        m.completions.as_ref().and_then(|c| c.name.clone())
+    });
+    let icon = manifest.and_then(|m| m.completions.as_ref().and_then(|c| c.icon.clone()));
+    let grouping = manifest.and_then(|m| m.completions.as_ref().and_then(|c| c.grouping.clone()));
+    let aliases = manifest
+        .and_then(|m| m.completions.as_ref().map(|c| c.aliases.clone()))
+        .unwrap_or_default();
+    (name, icon, grouping, aliases)
+}
+
 /// Merge a (possibly absent) manifest with CLI arguments.
 ///
 /// CLI arguments override manifest values. "all" in any target list is resolved
 /// later by the generator (which knows the full registry).
 #[must_use]
 pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateConfig {
-    let spec = cli
-        .spec
-        .clone()
-        .or_else(|| manifest.and_then(|m| m.spec.as_ref().map(|s| s.path.clone())))
-        .unwrap_or_default();
+    let spec = cli_or_manifest(cli.spec.as_ref(), manifest, |m| {
+        m.spec.as_ref().map(|s| s.path.clone())
+    }).unwrap_or_default();
 
-    let output_dir = cli
-        .output
-        .clone()
-        .or_else(|| {
-            manifest.and_then(|m| {
-                m.output
-                    .as_ref()
-                    .and_then(|o| o.dir.clone())
-            })
-        })
-        .unwrap_or_else(|| String::from("./generated"));
+    let output_dir = cli_or_manifest(cli.output.as_ref(), manifest, |m| {
+        m.output.as_ref().and_then(|o| o.dir.clone())
+    }).unwrap_or_else(|| String::from("./generated"));
 
-    let sdks = parse_csv_or(
-        cli.sdks.as_deref(),
-        manifest.and_then(|m| m.sdks.as_ref()),
-    );
-    let servers = parse_csv_or(
-        cli.servers.as_deref(),
-        manifest.and_then(|m| m.servers.as_ref()),
-    );
-    let schemas = parse_csv_or(
-        cli.schemas.as_deref(),
-        manifest.and_then(|m| m.schemas.as_ref()),
-    );
-    let docs = parse_csv_or(
-        cli.docs.as_deref(),
-        manifest.and_then(|m| m.docs.as_ref()),
-    );
+    let sdks = parse_csv_or(cli.sdks.as_deref(), manifest.and_then(|m| m.sdks.as_ref()));
+    let servers = parse_csv_or(cli.servers.as_deref(), manifest.and_then(|m| m.servers.as_ref()));
+    let schemas = parse_csv_or(cli.schemas.as_deref(), manifest.and_then(|m| m.schemas.as_ref()));
+    let docs = parse_csv_or(cli.docs.as_deref(), manifest.and_then(|m| m.docs.as_ref()));
+    let mcp_targets = parse_csv_or(cli.mcp.as_deref(), manifest.and_then(|m| m.mcp.as_ref()));
+    let helm_targets = parse_csv_or(cli.helm.as_deref(), manifest.and_then(|m| m.helm.as_ref()));
+    let iac_backends = parse_csv_or(cli.iac.as_deref(), manifest.and_then(|m| m.iac.as_ref()));
+    let completion_targets = parse_csv_or(cli.completions.as_deref(), manifest.and_then(|m| m.completions.as_ref()));
 
-    let mcp_targets = parse_csv_or(
-        cli.mcp.as_deref(),
-        manifest.and_then(|m| m.mcp.as_ref()),
-    );
-    let mcp_name = cli
-        .mcp_name
-        .clone()
-        .or_else(|| manifest.and_then(|m| m.mcp.as_ref().and_then(|mc| mc.name.clone())));
-
-    let helm_targets = parse_csv_or(
-        cli.helm.as_deref(),
-        manifest.and_then(|m| m.helm.as_ref()),
-    );
-
-    let helm_resources = cli
-        .helm_resources
-        .clone()
-        .or_else(|| {
-            manifest.and_then(|m| {
-                m.helm
-                    .as_ref()
-                    .and_then(|h| h.resources.clone())
-            })
-        });
-
-    let helm_provider = cli
-        .helm_provider
-        .clone()
-        .or_else(|| {
-            manifest.and_then(|m| {
-                m.helm
-                    .as_ref()
-                    .and_then(|h| h.provider.clone())
-            })
-        });
-
-    let iac_backends = parse_csv_or(
-        cli.iac.as_deref(),
-        manifest.and_then(|m| m.iac.as_ref()),
-    );
-
-    let iac_resources = cli
-        .resources
-        .clone()
-        .or_else(|| {
-            manifest.and_then(|m| {
-                m.iac
-                    .as_ref()
-                    .and_then(|i| i.resources.clone())
-            })
-        });
-
-    let iac_provider = cli
-        .provider
-        .clone()
-        .or_else(|| {
-            manifest.and_then(|m| {
-                m.iac
-                    .as_ref()
-                    .and_then(|i| i.provider.clone())
-            })
-        });
-
-    let completion_targets = parse_csv_or(
-        cli.completions.as_deref(),
-        manifest.and_then(|m| m.completions.as_ref()),
-    );
-    let completion_name = cli
-        .completion_name
-        .clone()
-        .or_else(|| {
-            manifest.and_then(|m| {
-                m.completions
-                    .as_ref()
-                    .and_then(|c| c.name.clone())
-            })
-        });
-    let completion_icon = manifest.and_then(|m| {
-        m.completions
-            .as_ref()
-            .and_then(|c| c.icon.clone())
+    let mcp_name = cli_or_manifest(cli.mcp_name.as_ref(), manifest, |m| {
+        m.mcp.as_ref().and_then(|mc| mc.name.clone())
     });
-    let completion_grouping = manifest.and_then(|m| {
-        m.completions
-            .as_ref()
-            .and_then(|c| c.grouping.clone())
+    let helm_resources = cli_or_manifest(cli.helm_resources.as_ref(), manifest, |m| {
+        m.helm.as_ref().and_then(|h| h.resources.clone())
     });
-    let completion_aliases = manifest
-        .and_then(|m| m.completions.as_ref().map(|c| c.aliases.clone()))
-        .unwrap_or_default();
+    let helm_provider = cli_or_manifest(cli.helm_provider.as_ref(), manifest, |m| {
+        m.helm.as_ref().and_then(|h| h.provider.clone())
+    });
+    let iac_resources = cli_or_manifest(cli.resources.as_ref(), manifest, |m| {
+        m.iac.as_ref().and_then(|i| i.resources.clone())
+    });
+    let iac_provider = cli_or_manifest(cli.provider.as_ref(), manifest, |m| {
+        m.iac.as_ref().and_then(|i| i.provider.clone())
+    });
+
+    let (completion_name, completion_icon, completion_grouping, completion_aliases) =
+        resolve_completion_fields(manifest, cli);
 
     GenerateConfig {
-        spec,
-        output_dir,
-        sdks,
-        servers,
-        iac_backends,
-        iac_resources,
-        iac_provider,
-        helm_targets,
-        helm_resources,
-        helm_provider,
-        schemas,
-        docs,
-        mcp_targets,
-        mcp_name,
-        completion_targets,
-        completion_name,
-        completion_icon,
-        completion_grouping,
-        completion_aliases,
+        spec, output_dir, sdks, servers, schemas, docs,
+        iac_backends, iac_resources, iac_provider,
+        helm_targets, helm_resources, helm_provider,
+        mcp_targets, mcp_name,
+        completion_targets, completion_name, completion_icon,
+        completion_grouping, completion_aliases,
         parallel: cli.parallel,
     }
 }

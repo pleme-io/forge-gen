@@ -18,11 +18,11 @@ trait TaskRunner: Send + 'static {
     /// Human-readable target name (e.g. "go", "terraform", "skim-tab").
     fn name(&self) -> &str;
     /// Category label for display (e.g. "sdk", "iac", "helm", "mcp", "completion").
-    fn category(&self) -> &str;
+    fn category(&self) -> &'static str;
     /// Directory where output is written.
     fn output_dir(&self) -> &str;
     /// Name of the binary to invoke (e.g. "openapi-generator-cli", "iac-forge").
-    fn binary_name(&self) -> &str;
+    fn binary_name(&self) -> &'static str;
     /// Build the full argument list for the subprocess.
     fn build_args(&self) -> Vec<String>;
 }
@@ -93,7 +93,7 @@ async fn run_task_owned(task: Box<dyn TaskRunner>) -> Result<TaskResult> {
 
 #[derive(Debug, ClapArgs)]
 pub struct Args {
-    /// Path to an OpenAPI spec (YAML or JSON)
+    /// Path to an `OpenAPI` spec (YAML or JSON)
     #[arg(long)]
     pub spec: Option<String>,
 
@@ -109,7 +109,7 @@ pub struct Args {
     #[arg(long)]
     pub servers: Option<String>,
 
-    /// Comma-separated IaC backends or "all"
+    /// Comma-separated `IaC` backends or "all"
     #[arg(long)]
     pub iac: Option<String>,
 
@@ -149,11 +149,11 @@ pub struct Args {
     #[arg(long)]
     pub completion_name: Option<String>,
 
-    /// TOML resource specs directory (for IaC generation)
+    /// TOML resource specs directory (for `IaC` generation)
     #[arg(long)]
     pub resources: Option<String>,
 
-    /// Path to provider.toml (for IaC generation)
+    /// Path to `provider.toml` (for `IaC` generation)
     #[arg(long)]
     pub provider: Option<String>,
 
@@ -256,8 +256,8 @@ pub async fn run(args: Args) -> Result<()> {
     // ── Summary table ────────────────────────────────────────────────
     println!("\n{}", "  Generator Results".bold());
     println!(
-        "  {:<24} {:<10} {:<8} {}",
-        "Target", "Category", "Status", "Output"
+        "  {:<24} {:<10} {:<8} Output",
+        "Target", "Category", "Status"
     );
     println!("  {}", "-".repeat(70));
 
@@ -322,16 +322,16 @@ struct TaskResult {
 struct OpenApiTask {
     name: String,
     generator: String,
-    category: String,
+    category: &'static str,
     spec: String,
     output_dir: String,
 }
 
 impl TaskRunner for OpenApiTask {
     fn name(&self) -> &str { &self.name }
-    fn category(&self) -> &str { &self.category }
+    fn category(&self) -> &'static str { self.category }
     fn output_dir(&self) -> &str { &self.output_dir }
-    fn binary_name(&self) -> &str { "openapi-generator-cli" }
+    fn binary_name(&self) -> &'static str { "openapi-generator-cli" }
 
     fn build_args(&self) -> Vec<String> {
         vec![
@@ -346,7 +346,7 @@ impl TaskRunner for OpenApiTask {
     }
 }
 
-fn build_openapi_task(name: &str, category: &str, config: &GenerateConfig) -> OpenApiTask {
+fn build_openapi_task(name: &str, category: &'static str, config: &GenerateConfig) -> OpenApiTask {
     let info = registry::find(name);
     let generator = info.map_or_else(|| name.to_string(), |i| i.generator.to_string());
     let out = format!("{}/{category}/{name}", config.output_dir);
@@ -354,7 +354,7 @@ fn build_openapi_task(name: &str, category: &str, config: &GenerateConfig) -> Op
     OpenApiTask {
         name: name.to_string(),
         generator,
-        category: category.to_string(),
+        category,
         spec: config.spec.clone(),
         output_dir: out,
     }
@@ -371,9 +371,9 @@ struct IacTask {
 
 impl TaskRunner for IacTask {
     fn name(&self) -> &str { &self.name }
-    fn category(&self) -> &str { "iac" }
+    fn category(&self) -> &'static str { "iac" }
     fn output_dir(&self) -> &str { &self.output_dir }
-    fn binary_name(&self) -> &str { "iac-forge" }
+    fn binary_name(&self) -> &'static str { "iac-forge" }
 
     fn build_args(&self) -> Vec<String> {
         let mut args = vec![
@@ -420,9 +420,9 @@ struct HelmTask {
 
 impl TaskRunner for HelmTask {
     fn name(&self) -> &str { &self.name }
-    fn category(&self) -> &str { "helm" }
+    fn category(&self) -> &'static str { "helm" }
     fn output_dir(&self) -> &str { &self.output_dir }
-    fn binary_name(&self) -> &str { "iac-forge" }
+    fn binary_name(&self) -> &'static str { "iac-forge" }
 
     fn build_args(&self) -> Vec<String> {
         let mut args = vec![
@@ -468,9 +468,9 @@ struct McpTask {
 
 impl TaskRunner for McpTask {
     fn name(&self) -> &str { &self.name }
-    fn category(&self) -> &str { "mcp" }
+    fn category(&self) -> &'static str { "mcp" }
     fn output_dir(&self) -> &str { &self.output_dir }
-    fn binary_name(&self) -> &str { "mcp-forge" }
+    fn binary_name(&self) -> &'static str { "mcp-forge" }
 
     fn build_args(&self) -> Vec<String> {
         let mut args = vec![
@@ -513,9 +513,9 @@ struct CompletionTask {
 
 impl TaskRunner for CompletionTask {
     fn name(&self) -> &str { &self.name }
-    fn category(&self) -> &str { "completion" }
+    fn category(&self) -> &'static str { "completion" }
     fn output_dir(&self) -> &str { &self.output_dir }
-    fn binary_name(&self) -> &str { "completion-forge" }
+    fn binary_name(&self) -> &'static str { "completion-forge" }
 
     fn build_args(&self) -> Vec<String> {
         let mut args = vec![
@@ -655,7 +655,7 @@ mod tests {
         let task = OpenApiTask {
             name: "go".to_string(),
             generator: "go".to_string(),
-            category: "sdk".to_string(),
+            category: "sdk",
             spec: "api.yaml".to_string(),
             output_dir: "./out/sdk/go".to_string(),
         };
@@ -670,7 +670,7 @@ mod tests {
         let task = OpenApiTask {
             name: "python".to_string(),
             generator: "python".to_string(),
-            category: "sdk".to_string(),
+            category: "sdk",
             spec: "spec.yaml".to_string(),
             output_dir: "./out/sdk/python".to_string(),
         };

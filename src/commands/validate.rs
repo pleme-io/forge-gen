@@ -6,7 +6,7 @@ use colored::Colorize;
 
 #[derive(Debug, ClapArgs)]
 pub struct Args {
-    /// Path to the OpenAPI spec (YAML or JSON)
+    /// Path to the `OpenAPI` spec (YAML or JSON)
     #[arg(long)]
     pub spec: String,
 }
@@ -17,7 +17,7 @@ pub struct Args {
 /// # Errors
 ///
 /// Returns an error if the spec cannot be read or parsed.
-pub fn run(args: Args) -> Result<()> {
+pub fn run(args: &Args) -> Result<()> {
     let path = Path::new(&args.spec);
     if !path.exists() {
         bail!("spec file not found: {}", args.spec);
@@ -145,7 +145,7 @@ mod tests {
         let args = Args {
             spec: path.to_str().unwrap().to_string(),
         };
-        let result = run(args);
+        let result = run(&args);
         assert!(result.is_ok(), "validate should succeed for valid JSON spec");
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -153,8 +153,6 @@ mod tests {
 
     #[test]
     fn validate_spec_parses_yaml_extension_gracefully() {
-        // YAML files that are not valid JSON get a placeholder — this should
-        // still not error out (the function warns but continues).
         let dir = std::env::temp_dir().join("forge_gen_test_validate_yaml");
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("spec.yaml");
@@ -167,7 +165,7 @@ mod tests {
         let args = Args {
             spec: path.to_str().unwrap().to_string(),
         };
-        let result = run(args);
+        let result = run(&args);
         assert!(
             result.is_ok(),
             "validate should not error for YAML specs (degrades gracefully)"
@@ -181,7 +179,7 @@ mod tests {
         let args = Args {
             spec: "/tmp/forge_gen_nonexistent_spec.json".to_string(),
         };
-        let result = run(args);
+        let result = run(&args);
         assert!(result.is_err());
     }
 
@@ -213,7 +211,7 @@ mod tests {
         let args = Args {
             spec: path.to_str().unwrap().to_string(),
         };
-        assert!(run(args).is_ok());
+        assert!(run(&args).is_ok());
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -240,7 +238,7 @@ mod tests {
         let args = Args {
             spec: path.to_str().unwrap().to_string(),
         };
-        assert!(run(args).is_ok());
+        assert!(run(&args).is_ok());
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -259,7 +257,7 @@ mod tests {
         let args = Args {
             spec: path.to_str().unwrap().to_string(),
         };
-        assert!(run(args).is_ok(), "missing info section should not error");
+        assert!(run(&args).is_ok(), "missing info section should not error");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -278,7 +276,7 @@ mod tests {
         let args = Args {
             spec: path.to_str().unwrap().to_string(),
         };
-        assert!(run(args).is_ok(), "missing paths section should not error");
+        assert!(run(&args).is_ok(), "missing paths section should not error");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -302,7 +300,7 @@ mod tests {
             spec: path.to_str().unwrap().to_string(),
         };
         assert!(
-            run(args).is_ok(),
+            run(&args).is_ok(),
             "missing components section should not error"
         );
 
@@ -319,7 +317,7 @@ mod tests {
         let args = Args {
             spec: path.to_str().unwrap().to_string(),
         };
-        assert!(run(args).is_ok(), "empty JSON object should not error");
+        assert!(run(&args).is_ok(), "empty JSON object should not error");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -335,7 +333,7 @@ mod tests {
             spec: path.to_str().unwrap().to_string(),
         };
         assert!(
-            run(args).is_err(),
+            run(&args).is_err(),
             "invalid JSON file (not .yaml) should error"
         );
 
@@ -353,7 +351,7 @@ mod tests {
             spec: path.to_str().unwrap().to_string(),
         };
         assert!(
-            run(args).is_ok(),
+            run(&args).is_ok(),
             ".yml extension should also be handled gracefully"
         );
 
@@ -375,7 +373,7 @@ mod tests {
             spec: path.to_str().unwrap().to_string(),
         };
         assert!(
-            run(args).is_ok(),
+            run(&args).is_ok(),
             "JSON content with .yaml extension should parse normally"
         );
 
@@ -407,7 +405,7 @@ mod tests {
         let args = Args {
             spec: path.to_str().unwrap().to_string(),
         };
-        assert!(run(args).is_ok());
+        assert!(run(&args).is_ok());
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -427,7 +425,7 @@ mod tests {
             spec: path.to_str().unwrap().to_string(),
         };
         assert!(
-            run(args).is_ok(),
+            run(&args).is_ok(),
             "missing title/version in info should use defaults, not error"
         );
 
@@ -455,7 +453,7 @@ mod tests {
         let args = Args {
             spec: path.to_str().unwrap().to_string(),
         };
-        assert!(run(args).is_ok());
+        assert!(run(&args).is_ok());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

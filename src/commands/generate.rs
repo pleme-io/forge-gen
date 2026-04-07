@@ -91,6 +91,7 @@ async fn run_task_owned(task: Box<dyn TaskRunner>) -> Result<TaskResult> {
     .await
 }
 
+/// CLI arguments for the `generate` subcommand.
 #[derive(Debug, ClapArgs)]
 pub struct Args {
     /// Path to an `OpenAPI` spec (YAML or JSON)

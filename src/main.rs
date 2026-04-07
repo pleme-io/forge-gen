@@ -6,6 +6,7 @@ mod commands;
 mod manifest;
 mod registry;
 
+/// Top-level CLI definition for `forge-gen`.
 #[derive(Parser)]
 #[command(
     name = "forge-gen",
@@ -21,6 +22,7 @@ pub struct Cli {
     command: Command,
 }
 
+/// Available subcommands.
 #[derive(Subcommand)]
 pub enum Command {
     /// Generate code from an `OpenAPI` spec (SDKs, servers, `IaC`, schemas, docs)

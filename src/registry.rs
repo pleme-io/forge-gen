@@ -1,12 +1,15 @@
 use std::fmt;
 
-/// Error returned when a string cannot be parsed as a [`Category`].
+/// Error returned when a string cannot be parsed into a [`Category`].
 #[derive(Debug, Clone, thiserror::Error)]
-#[error("unknown category: {0}")]
-pub struct ParseCategoryError(String);
+#[error("unknown category: {input}")]
+pub struct ParseCategoryError {
+    input: String,
+}
 
 /// Category of a code generator.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Category {
     Sdk,
     Server,
@@ -16,6 +19,35 @@ pub enum Category {
     Helm,
     Mcp,
     Completion,
+}
+
+impl Category {
+    /// All known category variants, in canonical order.
+    pub const ALL: &[Self] = &[
+        Self::Sdk,
+        Self::Server,
+        Self::Schema,
+        Self::Doc,
+        Self::Iac,
+        Self::Helm,
+        Self::Mcp,
+        Self::Completion,
+    ];
+
+    /// Lowercase string representation matching the canonical CLI form.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Sdk => "sdk",
+            Self::Server => "server",
+            Self::Schema => "schema",
+            Self::Doc => "doc",
+            Self::Iac => "iac",
+            Self::Helm => "helm",
+            Self::Mcp => "mcp",
+            Self::Completion => "completion",
+        }
+    }
 }
 
 impl std::str::FromStr for Category {
@@ -31,8 +63,16 @@ impl std::str::FromStr for Category {
             "helm" => Ok(Self::Helm),
             "mcp" => Ok(Self::Mcp),
             "completion" | "completions" => Ok(Self::Completion),
-            other => Err(ParseCategoryError(other.to_string())),
+            _ => Err(ParseCategoryError {
+                input: s.to_string(),
+            }),
         }
+    }
+}
+
+impl From<Category> for &'static str {
+    fn from(cat: Category) -> Self {
+        cat.as_str()
     }
 }
 
@@ -53,6 +93,7 @@ impl fmt::Display for Category {
 
 /// Metadata for a single generator target.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use]
 pub struct GeneratorInfo {
     /// Friendly name used on the CLI (e.g. "go", "typescript-axios").
     pub name: &'static str,
@@ -438,18 +479,10 @@ mod tests {
 
     #[test]
     fn by_category_counts_are_consistent() {
-        let total: usize = [
-            by_category(Category::Sdk).len(),
-            by_category(Category::Server).len(),
-            by_category(Category::Schema).len(),
-            by_category(Category::Doc).len(),
-            by_category(Category::Iac).len(),
-            by_category(Category::Helm).len(),
-            by_category(Category::Mcp).len(),
-            by_category(Category::Completion).len(),
-        ]
-        .iter()
-        .sum();
+        let total: usize = Category::ALL
+            .iter()
+            .map(|cat| by_category(*cat).len())
+            .sum();
 
         assert_eq!(total, REGISTRY.len());
     }
@@ -475,16 +508,7 @@ mod tests {
 
     #[test]
     fn names_for_category_matches_by_category_length() {
-        for cat in [
-            Category::Sdk,
-            Category::Server,
-            Category::Schema,
-            Category::Doc,
-            Category::Iac,
-            Category::Helm,
-            Category::Mcp,
-            Category::Completion,
-        ] {
+        for &cat in Category::ALL {
             assert_eq!(
                 names_for_category(cat).len(),
                 by_category(cat).len(),
@@ -730,16 +754,49 @@ mod tests {
 
     #[test]
     fn category_display_roundtrip_lowercase_parses_back() {
-        for cat in [
-            Category::Sdk, Category::Server, Category::Schema,
-            Category::Doc, Category::Iac, Category::Helm,
-            Category::Mcp, Category::Completion,
-        ] {
+        for &cat in Category::ALL {
             let displayed = cat.to_string().to_lowercase();
             let parsed: Category = displayed.parse().unwrap_or_else(|e| {
                 panic!("failed to round-trip {cat}: {e}");
             });
             assert_eq!(parsed, cat, "round-trip failed for {cat}");
         }
+    }
+
+    #[test]
+    fn category_all_contains_every_variant() {
+        assert_eq!(Category::ALL.len(), 8);
+        assert!(Category::ALL.contains(&Category::Sdk));
+        assert!(Category::ALL.contains(&Category::Completion));
+    }
+
+    #[test]
+    fn category_is_hashable() {
+        let mut set = std::collections::HashSet::new();
+        set.insert(Category::Sdk);
+        set.insert(Category::Sdk);
+        assert_eq!(set.len(), 1);
+    }
+
+    #[test]
+    fn category_as_str_roundtrips_through_from_str() {
+        for &cat in Category::ALL {
+            let s = cat.as_str();
+            let parsed: Category = s.parse().unwrap();
+            assert_eq!(parsed, cat, "as_str/FromStr round-trip failed for {cat}");
+        }
+    }
+
+    #[test]
+    fn category_as_str_values() {
+        assert_eq!(Category::Sdk.as_str(), "sdk");
+        assert_eq!(Category::Iac.as_str(), "iac");
+        assert_eq!(Category::Completion.as_str(), "completion");
+    }
+
+    #[test]
+    fn category_into_static_str() {
+        let s: &'static str = Category::Helm.into();
+        assert_eq!(s, "helm");
     }
 }

@@ -4,7 +4,7 @@
 
 ```bash
 cargo build
-cargo test           # 100 tests
+cargo test           # 257 tests
 cargo run -- generate --spec openapi.yaml --sdks rust,go --mcp mcp-rust
 cargo run -- list    # show all registered generators
 cargo run -- list --category completion  # filter by category

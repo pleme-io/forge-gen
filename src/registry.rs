@@ -704,4 +704,42 @@ mod tests {
         assert!(names.contains(&"skim-tab"));
         assert!(names.contains(&"fish"));
     }
+
+    // ── ParseCategoryError ──────────────────────────────────────────────
+
+    #[test]
+    fn parse_category_error_is_typed() {
+        let err = "nope".parse::<Category>().unwrap_err();
+        assert_eq!(err.to_string(), "unknown category: nope");
+    }
+
+    #[test]
+    fn parse_category_error_implements_std_error() {
+        let err = "bad".parse::<Category>().unwrap_err();
+        let _: &dyn std::error::Error = &err;
+    }
+
+    #[test]
+    fn parse_category_error_debug_includes_input() {
+        let err = "xyz".parse::<Category>().unwrap_err();
+        let debug = format!("{err:?}");
+        assert!(debug.contains("xyz"));
+    }
+
+    // ── Category round-trip ─────────────────────────────────────────────
+
+    #[test]
+    fn category_display_roundtrip_lowercase_parses_back() {
+        for cat in [
+            Category::Sdk, Category::Server, Category::Schema,
+            Category::Doc, Category::Iac, Category::Helm,
+            Category::Mcp, Category::Completion,
+        ] {
+            let displayed = cat.to_string().to_lowercase();
+            let parsed: Category = displayed.parse().unwrap_or_else(|e| {
+                panic!("failed to round-trip {cat}: {e}");
+            });
+            assert_eq!(parsed, cat, "round-trip failed for {cat}");
+        }
+    }
 }

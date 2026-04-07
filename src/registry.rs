@@ -514,4 +514,189 @@ mod tests {
         );
         assert!("nonexistent".parse::<Category>().is_err());
     }
+
+    // ── Category FromStr: exhaustive variant + alias coverage ────────────
+
+    #[test]
+    fn category_from_str_all_singular_forms() {
+        assert_eq!("sdk".parse::<Category>().unwrap(), Category::Sdk);
+        assert_eq!("server".parse::<Category>().unwrap(), Category::Server);
+        assert_eq!("schema".parse::<Category>().unwrap(), Category::Schema);
+        assert_eq!("doc".parse::<Category>().unwrap(), Category::Doc);
+        assert_eq!("iac".parse::<Category>().unwrap(), Category::Iac);
+        assert_eq!("helm".parse::<Category>().unwrap(), Category::Helm);
+        assert_eq!("mcp".parse::<Category>().unwrap(), Category::Mcp);
+        assert_eq!(
+            "completion".parse::<Category>().unwrap(),
+            Category::Completion
+        );
+    }
+
+    #[test]
+    fn category_from_str_all_plural_forms() {
+        assert_eq!("sdks".parse::<Category>().unwrap(), Category::Sdk);
+        assert_eq!("servers".parse::<Category>().unwrap(), Category::Server);
+        assert_eq!("schemas".parse::<Category>().unwrap(), Category::Schema);
+        assert_eq!("docs".parse::<Category>().unwrap(), Category::Doc);
+        assert_eq!(
+            "completions".parse::<Category>().unwrap(),
+            Category::Completion
+        );
+    }
+
+    #[test]
+    fn category_from_str_case_insensitive() {
+        assert_eq!("SDK".parse::<Category>().unwrap(), Category::Sdk);
+        assert_eq!("IAC".parse::<Category>().unwrap(), Category::Iac);
+        assert_eq!("Helm".parse::<Category>().unwrap(), Category::Helm);
+        assert_eq!("MCP".parse::<Category>().unwrap(), Category::Mcp);
+        assert_eq!("SCHEMAS".parse::<Category>().unwrap(), Category::Schema);
+        assert_eq!("DOCS".parse::<Category>().unwrap(), Category::Doc);
+    }
+
+    #[test]
+    fn category_from_str_error_message_contains_input() {
+        let err = "bogus".parse::<Category>().unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("bogus"),
+            "error message should include the invalid input, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn category_from_str_empty_string_errors() {
+        assert!("".parse::<Category>().is_err());
+    }
+
+    #[test]
+    fn category_from_str_whitespace_errors() {
+        assert!(" sdk ".parse::<Category>().is_err());
+    }
+
+    // ── find() edge cases ───────────────────────────────────────────────
+
+    #[test]
+    fn find_is_case_sensitive() {
+        assert!(find("Go").is_none(), "find should be case-sensitive");
+        assert!(find("PYTHON").is_none());
+    }
+
+    #[test]
+    fn find_every_registry_entry() {
+        for g in REGISTRY {
+            assert!(
+                find(g.name).is_some(),
+                "find({}) should return Some",
+                g.name
+            );
+        }
+    }
+
+    // ── by_category completeness ────────────────────────────────────────
+
+    #[test]
+    fn sdk_count_is_28() {
+        assert_eq!(by_category(Category::Sdk).len(), 28);
+    }
+
+    #[test]
+    fn server_count_is_5() {
+        assert_eq!(by_category(Category::Server).len(), 5);
+    }
+
+    #[test]
+    fn schema_count_is_4() {
+        assert_eq!(by_category(Category::Schema).len(), 4);
+    }
+
+    #[test]
+    fn doc_count_is_4() {
+        assert_eq!(by_category(Category::Doc).len(), 4);
+    }
+
+    #[test]
+    fn iac_count_is_6() {
+        assert_eq!(by_category(Category::Iac).len(), 6);
+    }
+
+    #[test]
+    fn helm_count_is_1() {
+        assert_eq!(by_category(Category::Helm).len(), 1);
+    }
+
+    #[test]
+    fn mcp_count_is_1() {
+        assert_eq!(by_category(Category::Mcp).len(), 1);
+    }
+
+    #[test]
+    fn completion_count_is_2() {
+        assert_eq!(by_category(Category::Completion).len(), 2);
+    }
+
+    #[test]
+    fn total_registry_count_is_51() {
+        assert_eq!(REGISTRY.len(), 51);
+    }
+
+    // ── GeneratorInfo field correctness: spot-check representative entries ──
+
+    #[test]
+    fn swift_generator_uses_swift6() {
+        let info = find("swift").unwrap();
+        assert_eq!(info.generator, "swift6");
+    }
+
+    #[test]
+    fn typescript_generator_uses_fetch() {
+        let info = find("typescript").unwrap();
+        assert_eq!(info.generator, "typescript-fetch");
+    }
+
+    #[test]
+    fn html_generator_uses_html2() {
+        let info = find("html").unwrap();
+        assert_eq!(info.generator, "html2");
+    }
+
+    #[test]
+    fn scala_generator_uses_sttp() {
+        let info = find("scala").unwrap();
+        assert_eq!(info.generator, "scala-sttp");
+    }
+
+    #[test]
+    fn haskell_generator_uses_http_client() {
+        let info = find("haskell").unwrap();
+        assert_eq!(info.generator, "haskell-http-client");
+    }
+
+    #[test]
+    fn cpp_generator_uses_restsdk() {
+        let info = find("cpp").unwrap();
+        assert_eq!(info.generator, "cpp-restsdk");
+    }
+
+    // ── names_for_category edge cases ───────────────────────────────────
+
+    #[test]
+    fn names_for_category_helm_returns_single_entry() {
+        let names = names_for_category(Category::Helm);
+        assert_eq!(names, vec!["helm"]);
+    }
+
+    #[test]
+    fn names_for_category_mcp_returns_single_entry() {
+        let names = names_for_category(Category::Mcp);
+        assert_eq!(names, vec!["mcp-rust"]);
+    }
+
+    #[test]
+    fn names_for_category_completion() {
+        let names = names_for_category(Category::Completion);
+        assert_eq!(names.len(), 2);
+        assert!(names.contains(&"skim-tab"));
+        assert!(names.contains(&"fish"));
+    }
 }

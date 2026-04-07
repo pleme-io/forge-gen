@@ -56,3 +56,115 @@ pub fn run(args: Args) -> anyhow::Result<()> {
 fn parse_category(s: &str) -> anyhow::Result<Category> {
     s.parse()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_no_filter_lists_all_categories() {
+        let args = Args { category: None };
+        let result = run(args);
+        assert!(result.is_ok(), "list with no filter should succeed");
+    }
+
+    #[test]
+    fn run_filter_sdk() {
+        let args = Args {
+            category: Some("sdk".to_string()),
+        };
+        assert!(run(args).is_ok());
+    }
+
+    #[test]
+    fn run_filter_server() {
+        let args = Args {
+            category: Some("server".to_string()),
+        };
+        assert!(run(args).is_ok());
+    }
+
+    #[test]
+    fn run_filter_iac() {
+        let args = Args {
+            category: Some("iac".to_string()),
+        };
+        assert!(run(args).is_ok());
+    }
+
+    #[test]
+    fn run_filter_schema() {
+        let args = Args {
+            category: Some("schema".to_string()),
+        };
+        assert!(run(args).is_ok());
+    }
+
+    #[test]
+    fn run_filter_doc() {
+        let args = Args {
+            category: Some("doc".to_string()),
+        };
+        assert!(run(args).is_ok());
+    }
+
+    #[test]
+    fn run_filter_helm() {
+        let args = Args {
+            category: Some("helm".to_string()),
+        };
+        assert!(run(args).is_ok());
+    }
+
+    #[test]
+    fn run_filter_mcp() {
+        let args = Args {
+            category: Some("mcp".to_string()),
+        };
+        assert!(run(args).is_ok());
+    }
+
+    #[test]
+    fn run_filter_completion() {
+        let args = Args {
+            category: Some("completion".to_string()),
+        };
+        assert!(run(args).is_ok());
+    }
+
+    #[test]
+    fn run_invalid_category_returns_error() {
+        let args = Args {
+            category: Some("bogus".to_string()),
+        };
+        let result = run(args);
+        assert!(result.is_err(), "invalid category should produce an error");
+    }
+
+    #[test]
+    fn run_empty_string_category_returns_error() {
+        let args = Args {
+            category: Some(String::new()),
+        };
+        assert!(run(args).is_err());
+    }
+
+    #[test]
+    fn parse_category_case_insensitive() {
+        assert!(parse_category("SDK").is_ok());
+        assert!(parse_category("Sdk").is_ok());
+        assert!(parse_category("sDk").is_ok());
+    }
+
+    #[test]
+    fn parse_category_plural_forms() {
+        assert_eq!(parse_category("sdks").unwrap(), Category::Sdk);
+        assert_eq!(parse_category("servers").unwrap(), Category::Server);
+        assert_eq!(parse_category("schemas").unwrap(), Category::Schema);
+        assert_eq!(parse_category("docs").unwrap(), Category::Doc);
+        assert_eq!(
+            parse_category("completions").unwrap(),
+            Category::Completion
+        );
+    }
+}

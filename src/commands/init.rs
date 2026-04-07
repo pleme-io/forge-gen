@@ -150,7 +150,6 @@ mod tests {
         let dir = std::env::temp_dir().join("forge_gen_test_init_overwrite");
         let _ = std::fs::create_dir_all(&dir);
 
-        // Create an existing forge-gen.toml so that init should refuse.
         let manifest_path = dir.join("forge-gen.toml");
         std::fs::write(&manifest_path, "# existing").unwrap();
 
@@ -160,9 +159,74 @@ mod tests {
         let result = run(args);
         assert!(result.is_err(), "init should refuse to overwrite existing file");
 
-        // Verify the original content was not changed.
         let content = std::fs::read_to_string(&manifest_path).unwrap();
         assert_eq!(content, "# existing");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn starter_manifest_parses_as_manifest_struct() {
+        let parsed: Result<crate::manifest::Manifest, _> = toml::from_str(STARTER_MANIFEST);
+        assert!(
+            parsed.is_ok(),
+            "STARTER_MANIFEST should parse as Manifest struct: {}",
+            parsed.unwrap_err()
+        );
+        let m = parsed.unwrap();
+        assert_eq!(m.spec.as_ref().unwrap().path, "openapi.yaml");
+        assert_eq!(
+            m.sdks.as_ref().unwrap().targets,
+            vec!["go", "python", "typescript"]
+        );
+    }
+
+    #[test]
+    fn starter_manifest_output_dir() {
+        let m: crate::manifest::Manifest =
+            toml::from_str(STARTER_MANIFEST).unwrap();
+        assert_eq!(
+            m.output.as_ref().unwrap().dir.as_deref(),
+            Some("./generated")
+        );
+    }
+
+    #[test]
+    fn init_creates_nested_directories() {
+        let dir = std::env::temp_dir().join("forge_gen_test_init_nested/a/b/c");
+        let _ = std::fs::remove_dir_all(
+            std::env::temp_dir().join("forge_gen_test_init_nested"),
+        );
+
+        let args = Args {
+            dir: dir.to_str().unwrap().to_string(),
+        };
+        assert!(
+            run(args).is_ok(),
+            "init should create nested directories"
+        );
+        assert!(dir.join("forge-gen.toml").exists());
+
+        let _ = std::fs::remove_dir_all(
+            std::env::temp_dir().join("forge_gen_test_init_nested"),
+        );
+    }
+
+    #[test]
+    fn init_overwrite_error_message_contains_path() {
+        let dir = std::env::temp_dir().join("forge_gen_test_init_errmsg");
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("forge-gen.toml"), "x").unwrap();
+
+        let args = Args {
+            dir: dir.to_str().unwrap().to_string(),
+        };
+        let err = run(args).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("already exists"),
+            "error message should mention file already exists, got: {msg}"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

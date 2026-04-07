@@ -237,7 +237,221 @@ mod tests {
         )
         .unwrap();
 
-        // Missing operationId should produce a warning but not an error.
+        let args = Args {
+            spec: path.to_str().unwrap().to_string(),
+        };
+        assert!(run(args).is_ok());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_spec_no_info_section() {
+        let dir = std::env::temp_dir().join("forge_gen_test_validate_no_info");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("no-info.json");
+        std::fs::write(
+            &path,
+            r#"{ "openapi": "3.0.3", "paths": {} }"#,
+        )
+        .unwrap();
+
+        let args = Args {
+            spec: path.to_str().unwrap().to_string(),
+        };
+        assert!(run(args).is_ok(), "missing info section should not error");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_spec_no_paths_section() {
+        let dir = std::env::temp_dir().join("forge_gen_test_validate_no_paths");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("no-paths.json");
+        std::fs::write(
+            &path,
+            r#"{ "openapi": "3.0.3", "info": { "title": "T", "version": "1.0" } }"#,
+        )
+        .unwrap();
+
+        let args = Args {
+            spec: path.to_str().unwrap().to_string(),
+        };
+        assert!(run(args).is_ok(), "missing paths section should not error");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_spec_no_components_section() {
+        let dir = std::env::temp_dir().join("forge_gen_test_validate_no_comp");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("no-comp.json");
+        std::fs::write(
+            &path,
+            r#"{
+  "openapi": "3.0.3",
+  "info": { "title": "No Components", "version": "1.0" },
+  "paths": {}
+}"#,
+        )
+        .unwrap();
+
+        let args = Args {
+            spec: path.to_str().unwrap().to_string(),
+        };
+        assert!(
+            run(args).is_ok(),
+            "missing components section should not error"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_spec_empty_json_object() {
+        let dir = std::env::temp_dir().join("forge_gen_test_validate_empty_obj");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("empty.json");
+        std::fs::write(&path, "{}").unwrap();
+
+        let args = Args {
+            spec: path.to_str().unwrap().to_string(),
+        };
+        assert!(run(args).is_ok(), "empty JSON object should not error");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_spec_invalid_json_errors() {
+        let dir = std::env::temp_dir().join("forge_gen_test_validate_bad_json");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("bad.json");
+        std::fs::write(&path, "not json at all {{{").unwrap();
+
+        let args = Args {
+            spec: path.to_str().unwrap().to_string(),
+        };
+        assert!(
+            run(args).is_err(),
+            "invalid JSON file (not .yaml) should error"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_spec_yml_extension_gracefully() {
+        let dir = std::env::temp_dir().join("forge_gen_test_validate_yml");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("spec.yml");
+        std::fs::write(&path, "openapi: '3.0.3'\ninfo:\n  title: T\n  version: '1'\n").unwrap();
+
+        let args = Args {
+            spec: path.to_str().unwrap().to_string(),
+        };
+        assert!(
+            run(args).is_ok(),
+            ".yml extension should also be handled gracefully"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_spec_json_with_yaml_extension() {
+        let dir = std::env::temp_dir().join("forge_gen_test_validate_json_yaml_ext");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("spec.yaml");
+        std::fs::write(
+            &path,
+            r#"{ "openapi": "3.0.3", "info": { "title": "JSON in YAML", "version": "1.0" }, "paths": {} }"#,
+        )
+        .unwrap();
+
+        let args = Args {
+            spec: path.to_str().unwrap().to_string(),
+        };
+        assert!(
+            run(args).is_ok(),
+            "JSON content with .yaml extension should parse normally"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_spec_with_schemas() {
+        let dir = std::env::temp_dir().join("forge_gen_test_validate_schemas");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("schemas.json");
+        std::fs::write(
+            &path,
+            r#"{
+  "openapi": "3.0.3",
+  "info": { "title": "Schema Test", "version": "1.0" },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "Alpha": { "type": "object" },
+      "Beta": { "type": "string" },
+      "Gamma": { "type": "integer" }
+    }
+  }
+}"#,
+        )
+        .unwrap();
+
+        let args = Args {
+            spec: path.to_str().unwrap().to_string(),
+        };
+        assert!(run(args).is_ok());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_spec_info_missing_title_and_version() {
+        let dir = std::env::temp_dir().join("forge_gen_test_validate_no_title");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("notitle.json");
+        std::fs::write(
+            &path,
+            r#"{ "info": {}, "paths": {} }"#,
+        )
+        .unwrap();
+
+        let args = Args {
+            spec: path.to_str().unwrap().to_string(),
+        };
+        assert!(
+            run(args).is_ok(),
+            "missing title/version in info should use defaults, not error"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_spec_multiple_missing_operation_ids() {
+        let dir = std::env::temp_dir().join("forge_gen_test_validate_multi_warn");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("multi-warn.json");
+        std::fs::write(
+            &path,
+            r#"{
+  "openapi": "3.0.3",
+  "info": { "title": "Multi", "version": "1.0" },
+  "paths": {
+    "/a": { "get": { "responses": {} }, "post": { "responses": {} } },
+    "/b": { "delete": { "responses": {} } }
+  }
+}"#,
+        )
+        .unwrap();
+
         let args = Args {
             spec: path.to_str().unwrap().to_string(),
         };

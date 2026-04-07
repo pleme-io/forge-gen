@@ -67,20 +67,8 @@ async fn execute_task(
     Ok(TaskResult { name, category, output_dir, success })
 }
 
-/// Execute a task from a trait object reference (sequential path).
-async fn run_task(task: &dyn TaskRunner) -> Result<TaskResult> {
-    execute_task(
-        task.name().to_string(),
-        task.category().to_string(),
-        task.output_dir().to_string(),
-        task.binary_name().to_string(),
-        task.build_args(),
-    )
-    .await
-}
-
-/// Execute a task from a boxed trait object (parallel `JoinSet::spawn` path).
-async fn run_task_owned(task: Box<dyn TaskRunner>) -> Result<TaskResult> {
+/// Execute a task from a boxed trait object (used by both parallel and sequential paths).
+async fn run_task(task: Box<dyn TaskRunner>) -> Result<TaskResult> {
     execute_task(
         task.name().to_string(),
         task.category().to_string(),
@@ -241,14 +229,14 @@ pub async fn run(args: Args) -> Result<()> {
     if config.parallel {
         let mut set = JoinSet::new();
         for task in tasks {
-            set.spawn(run_task_owned(task));
+            set.spawn(run_task(task));
         }
         while let Some(res) = set.join_next().await {
             results.push(res.context("task panicked")??);
         }
     } else {
         for task in tasks {
-            results.push(run_task(&*task).await?);
+            results.push(run_task(task).await?);
         }
     }
 
@@ -311,6 +299,14 @@ fn resolve_targets(targets: &[String], category: Category) -> Vec<String> {
     targets.to_vec()
 }
 
+/// Append `--flag value` to `args` if `value` is `Some`.
+fn push_optional(args: &mut Vec<String>, flag: &str, value: Option<&String>) {
+    if let Some(v) = value {
+        args.push(String::from(flag));
+        args.push(v.clone());
+    }
+}
+
 /// Result of a single generator invocation.
 struct TaskResult {
     name: String,
@@ -361,18 +357,20 @@ fn build_openapi_task(name: &str, category: &'static str, config: &GenerateConfi
     }
 }
 
-/// Describes an iac-forge invocation.
-struct IacTask {
+/// Describes an `iac-forge` invocation (used for both `IaC` and Helm categories).
+struct IacForgeTask {
     name: String,
+    backend: String,
+    category: &'static str,
     spec: String,
     output_dir: String,
     resources: Option<String>,
     provider: Option<String>,
 }
 
-impl TaskRunner for IacTask {
+impl TaskRunner for IacForgeTask {
     fn name(&self) -> &str { &self.name }
-    fn category(&self) -> &'static str { "iac" }
+    fn category(&self) -> &'static str { self.category }
     fn output_dir(&self) -> &str { &self.output_dir }
     fn binary_name(&self) -> &'static str { "iac-forge" }
 
@@ -380,29 +378,25 @@ impl TaskRunner for IacTask {
         let mut args = vec![
             String::from("generate"),
             String::from("--backend"),
-            self.name.clone(),
+            self.backend.clone(),
             String::from("--spec"),
             self.spec.clone(),
             String::from("--output"),
             self.output_dir.clone(),
         ];
-        if let Some(ref resources) = self.resources {
-            args.push(String::from("--resources"));
-            args.push(resources.clone());
-        }
-        if let Some(ref provider) = self.provider {
-            args.push(String::from("--provider"));
-            args.push(provider.clone());
-        }
+        push_optional(&mut args, "--resources", self.resources.as_ref());
+        push_optional(&mut args, "--provider", self.provider.as_ref());
         args
     }
 }
 
-fn build_iac_task(name: &str, config: &GenerateConfig) -> IacTask {
+fn build_iac_task(name: &str, config: &GenerateConfig) -> IacForgeTask {
     let out = format!("{}/iac/{name}", config.output_dir);
 
-    IacTask {
+    IacForgeTask {
         name: name.to_string(),
+        backend: name.to_string(),
+        category: "iac",
         spec: config.spec.clone(),
         output_dir: out,
         resources: config.iac_resources.clone(),
@@ -410,48 +404,13 @@ fn build_iac_task(name: &str, config: &GenerateConfig) -> IacTask {
     }
 }
 
-/// Describes a helm-forge invocation (via iac-forge --backend helm).
-struct HelmTask {
-    name: String,
-    spec: String,
-    output_dir: String,
-    resources: Option<String>,
-    provider: Option<String>,
-}
-
-impl TaskRunner for HelmTask {
-    fn name(&self) -> &str { &self.name }
-    fn category(&self) -> &'static str { "helm" }
-    fn output_dir(&self) -> &str { &self.output_dir }
-    fn binary_name(&self) -> &'static str { "iac-forge" }
-
-    fn build_args(&self) -> Vec<String> {
-        let mut args = vec![
-            String::from("generate"),
-            String::from("--backend"),
-            String::from("helm"),
-            String::from("--spec"),
-            self.spec.clone(),
-            String::from("--output"),
-            self.output_dir.clone(),
-        ];
-        if let Some(ref resources) = self.resources {
-            args.push(String::from("--resources"));
-            args.push(resources.clone());
-        }
-        if let Some(ref provider) = self.provider {
-            args.push(String::from("--provider"));
-            args.push(provider.clone());
-        }
-        args
-    }
-}
-
-fn build_helm_task(name: &str, config: &GenerateConfig) -> HelmTask {
+fn build_helm_task(name: &str, config: &GenerateConfig) -> IacForgeTask {
     let out = format!("{}/helm/{name}", config.output_dir);
 
-    HelmTask {
+    IacForgeTask {
         name: name.to_string(),
+        backend: String::from("helm"),
+        category: "helm",
         spec: config.spec.clone(),
         output_dir: out,
         resources: config.helm_resources.clone().or_else(|| config.iac_resources.clone()),
@@ -481,10 +440,7 @@ impl TaskRunner for McpTask {
             String::from("--output"),
             self.output_dir.clone(),
         ];
-        if let Some(ref name) = self.project_name {
-            args.push(String::from("--name"));
-            args.push(name.clone());
-        }
+        push_optional(&mut args, "--name", self.project_name.as_ref());
         args
     }
 }
@@ -528,18 +484,9 @@ impl TaskRunner for CompletionTask {
             String::from("--format"),
             self.format.clone(),
         ];
-        if let Some(ref name) = self.project_name {
-            args.push(String::from("--name"));
-            args.push(name.clone());
-        }
-        if let Some(ref icon) = self.icon {
-            args.push(String::from("--icon"));
-            args.push(icon.clone());
-        }
-        if let Some(ref grouping) = self.grouping {
-            args.push(String::from("--grouping"));
-            args.push(grouping.clone());
-        }
+        push_optional(&mut args, "--name", self.project_name.as_ref());
+        push_optional(&mut args, "--icon", self.icon.as_ref());
+        push_optional(&mut args, "--grouping", self.grouping.as_ref());
         if !self.aliases.is_empty() {
             args.push(String::from("--aliases"));
             args.push(self.aliases.join(","));
@@ -684,8 +631,10 @@ mod tests {
 
     #[test]
     fn iac_task_runner_fields() {
-        let task = IacTask {
+        let task = IacForgeTask {
             name: "terraform".to_string(),
+            backend: "terraform".to_string(),
+            category: "iac",
             spec: "api.yaml".to_string(),
             output_dir: "./out/iac/terraform".to_string(),
             resources: None,
@@ -698,8 +647,10 @@ mod tests {
 
     #[test]
     fn iac_task_build_args_minimal() {
-        let task = IacTask {
+        let task = IacForgeTask {
             name: "pulumi".to_string(),
+            backend: "pulumi".to_string(),
+            category: "iac",
             spec: "spec.yaml".to_string(),
             output_dir: "./out/iac/pulumi".to_string(),
             resources: None,
@@ -714,8 +665,10 @@ mod tests {
 
     #[test]
     fn iac_task_build_args_with_resources_and_provider() {
-        let task = IacTask {
+        let task = IacForgeTask {
             name: "terraform".to_string(),
+            backend: "terraform".to_string(),
+            category: "iac",
             spec: "spec.yaml".to_string(),
             output_dir: "./out/iac/terraform".to_string(),
             resources: Some("./res".to_string()),
@@ -735,8 +688,10 @@ mod tests {
 
     #[test]
     fn helm_task_runner_fields() {
-        let task = HelmTask {
+        let task = IacForgeTask {
             name: "helm".to_string(),
+            backend: "helm".to_string(),
+            category: "helm",
             spec: "api.yaml".to_string(),
             output_dir: "./out/helm/helm".to_string(),
             resources: None,
@@ -749,8 +704,10 @@ mod tests {
 
     #[test]
     fn helm_task_build_args_uses_helm_backend() {
-        let task = HelmTask {
+        let task = IacForgeTask {
             name: "helm".to_string(),
+            backend: "helm".to_string(),
+            category: "helm",
             spec: "spec.yaml".to_string(),
             output_dir: "./out/helm/helm".to_string(),
             resources: Some("./r".to_string()),
@@ -876,8 +833,10 @@ mod tests {
 
     #[test]
     fn iac_task_build_args_with_only_resources() {
-        let task = IacTask {
+        let task = IacForgeTask {
             name: "crossplane".to_string(),
+            backend: "crossplane".to_string(),
+            category: "iac",
             spec: "spec.yaml".to_string(),
             output_dir: "./out/iac/crossplane".to_string(),
             resources: Some("./r".to_string()),
@@ -890,8 +849,10 @@ mod tests {
 
     #[test]
     fn iac_task_build_args_with_only_provider() {
-        let task = IacTask {
+        let task = IacForgeTask {
             name: "ansible".to_string(),
+            backend: "ansible".to_string(),
+            category: "iac",
             spec: "spec.yaml".to_string(),
             output_dir: "./out/iac/ansible".to_string(),
             resources: None,
@@ -971,8 +932,10 @@ mod tests {
 
     #[test]
     fn helm_task_build_args_minimal() {
-        let task = HelmTask {
+        let task = IacForgeTask {
             name: "helm".to_string(),
+            backend: "helm".to_string(),
+            category: "helm",
             spec: "spec.yaml".to_string(),
             output_dir: "./out/helm/helm".to_string(),
             resources: None,
@@ -990,8 +953,10 @@ mod tests {
 
     #[test]
     fn helm_task_build_args_with_provider() {
-        let task = HelmTask {
+        let task = IacForgeTask {
             name: "helm".to_string(),
+            backend: "helm".to_string(),
+            category: "helm",
             spec: "spec.yaml".to_string(),
             output_dir: "./out/helm/helm".to_string(),
             resources: None,

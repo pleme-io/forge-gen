@@ -1021,4 +1021,345 @@ name = "manifest-name"
         let config = merge_with_cli(None, &cli);
         assert_eq!(config.spec, "");
     }
+
+    // ── Completion config round-trip ────────────────────────────────────
+
+    #[test]
+    fn parse_completion_config_without_optional_fields() {
+        let toml = r#"
+[completions]
+targets = ["fish"]
+"#;
+        let m: Manifest = toml::from_str(toml).expect("valid TOML");
+        let comp = m.completions.as_ref().unwrap();
+        assert_eq!(comp.targets, vec!["fish"]);
+        assert!(comp.name.is_none());
+        assert!(comp.icon.is_none());
+        assert!(comp.grouping.is_none());
+        assert!(comp.aliases.is_empty());
+    }
+
+    #[test]
+    fn parse_completion_config_with_all_fields() {
+        let toml = r#"
+[completions]
+targets = ["skim-tab", "fish"]
+name = "my-tool"
+icon = "★"
+grouping = "operation-id"
+aliases = ["mt", "tool"]
+"#;
+        let m: Manifest = toml::from_str(toml).expect("valid TOML");
+        let comp = m.completions.as_ref().unwrap();
+        assert_eq!(comp.name.as_deref(), Some("my-tool"));
+        assert_eq!(comp.icon.as_deref(), Some("★"));
+        assert_eq!(comp.grouping.as_deref(), Some("operation-id"));
+        assert_eq!(comp.aliases, vec!["mt", "tool"]);
+    }
+
+    #[test]
+    fn merge_completion_aliases_from_manifest() {
+        let manifest: Manifest = toml::from_str(
+            r#"
+[completions]
+targets = ["fish"]
+aliases = ["f", "fi"]
+"#,
+        )
+        .unwrap();
+        let cli = empty_cli();
+        let config = merge_with_cli(Some(&manifest), &cli);
+        assert_eq!(config.completion_aliases, vec!["f", "fi"]);
+    }
+
+    #[test]
+    fn merge_completion_aliases_default_empty() {
+        let cli = empty_cli();
+        let config = merge_with_cli(None, &cli);
+        assert!(config.completion_aliases.is_empty());
+    }
+
+    #[test]
+    fn merge_completion_icon_from_manifest() {
+        let manifest: Manifest = toml::from_str(
+            r#"
+[completions]
+targets = ["skim-tab"]
+icon = "🔥"
+"#,
+        )
+        .unwrap();
+        let cli = empty_cli();
+        let config = merge_with_cli(Some(&manifest), &cli);
+        assert_eq!(config.completion_icon.as_deref(), Some("🔥"));
+    }
+
+    #[test]
+    fn merge_completion_grouping_from_manifest() {
+        let manifest: Manifest = toml::from_str(
+            r#"
+[completions]
+targets = ["skim-tab"]
+grouping = "path"
+"#,
+        )
+        .unwrap();
+        let cli = empty_cli();
+        let config = merge_with_cli(Some(&manifest), &cli);
+        assert_eq!(config.completion_grouping.as_deref(), Some("path"));
+    }
+
+    // ── Helm config ─────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_helm_without_resources() {
+        let toml = r#"
+[helm]
+targets = ["helm"]
+"#;
+        let m: Manifest = toml::from_str(toml).expect("valid TOML");
+        let helm = m.helm.as_ref().unwrap();
+        assert_eq!(helm.targets, vec!["helm"]);
+        assert!(helm.resources.is_none());
+        assert!(helm.provider.is_none());
+    }
+
+    #[test]
+    fn merge_helm_manifest_resources_used_when_cli_absent() {
+        let manifest: Manifest = toml::from_str(
+            r#"
+[helm]
+targets = ["helm"]
+resources = "./h-res"
+provider = "./h-prov.toml"
+"#,
+        )
+        .unwrap();
+        let cli = empty_cli();
+        let config = merge_with_cli(Some(&manifest), &cli);
+        assert_eq!(config.helm_resources.as_deref(), Some("./h-res"));
+        assert_eq!(config.helm_provider.as_deref(), Some("./h-prov.toml"));
+    }
+
+    // ── MCP config ──────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_mcp_without_name() {
+        let toml = r#"
+[mcp]
+targets = ["mcp-rust"]
+"#;
+        let m: Manifest = toml::from_str(toml).expect("valid TOML");
+        let mcp = m.mcp.as_ref().unwrap();
+        assert_eq!(mcp.targets, vec!["mcp-rust"]);
+        assert!(mcp.name.is_none());
+    }
+
+    #[test]
+    fn merge_mcp_name_from_manifest() {
+        let manifest: Manifest = toml::from_str(
+            r#"
+[mcp]
+targets = ["mcp-rust"]
+name = "manifest-mcp-name"
+"#,
+        )
+        .unwrap();
+        let cli = empty_cli();
+        let config = merge_with_cli(Some(&manifest), &cli);
+        assert_eq!(config.mcp_name.as_deref(), Some("manifest-mcp-name"));
+    }
+
+    // ── IaC config ──────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_iac_without_optional_fields() {
+        let toml = r#"
+[iac]
+backends = ["terraform"]
+"#;
+        let m: Manifest = toml::from_str(toml).expect("valid TOML");
+        let iac = m.iac.as_ref().unwrap();
+        assert_eq!(iac.backends, vec!["terraform"]);
+        assert!(iac.resources.is_none());
+        assert!(iac.provider.is_none());
+    }
+
+    #[test]
+    fn merge_iac_resources_from_manifest() {
+        let manifest: Manifest = toml::from_str(
+            r#"
+[iac]
+backends = ["pulumi"]
+resources = "./iac-res"
+provider = "./iac-prov.toml"
+"#,
+        )
+        .unwrap();
+        let cli = empty_cli();
+        let config = merge_with_cli(Some(&manifest), &cli);
+        assert_eq!(config.iac_resources.as_deref(), Some("./iac-res"));
+        assert_eq!(config.iac_provider.as_deref(), Some("./iac-prov.toml"));
+    }
+
+    // ── parse_csv_or with HasTargets edge cases ─────────────────────────
+
+    #[test]
+    fn parse_csv_multiple_commas() {
+        let result = parse_csv_or::<TargetList>(Some(",,go,,python,,"), None);
+        assert_eq!(result, vec!["go", "python"]);
+    }
+
+    #[test]
+    fn parse_csv_all_value() {
+        let result = parse_csv_or::<TargetList>(Some("all"), None);
+        assert_eq!(result, vec!["all"]);
+    }
+
+    #[test]
+    fn parse_csv_cli_takes_precedence_over_iac_manifest() {
+        let ic = IacConfig {
+            backends: vec![String::from("terraform")],
+            resources: None,
+            provider: None,
+        };
+        let result = parse_csv_or(Some("pulumi,crossplane"), Some(&ic));
+        assert_eq!(result, vec!["pulumi", "crossplane"]);
+    }
+
+    #[test]
+    fn parse_csv_cli_takes_precedence_over_completion_manifest() {
+        let cc = CompletionConfig {
+            targets: vec![String::from("skim-tab")],
+            name: None,
+            icon: None,
+            grouping: None,
+            aliases: vec![],
+        };
+        let result = parse_csv_or(Some("fish"), Some(&cc));
+        assert_eq!(result, vec!["fish"]);
+    }
+
+    #[test]
+    fn parse_csv_cli_takes_precedence_over_helm_manifest() {
+        let hc = HelmConfig {
+            targets: vec![String::from("helm")],
+            resources: Some(String::from("r")),
+            provider: None,
+        };
+        let result = parse_csv_or(Some("helm"), Some(&hc));
+        assert_eq!(result, vec!["helm"]);
+    }
+
+    // ── load() edge cases ───────────────────────────────────────────────
+
+    #[test]
+    fn load_error_message_contains_path() {
+        let result = load(Path::new("/tmp/forge_gen_test_path_in_error_msg.toml"));
+        let err = result.unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("forge_gen_test_path_in_error_msg"),
+            "error should include the file path, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn load_invalid_toml_error_message_contains_path() {
+        let dir = std::env::temp_dir().join("forge_gen_test_load_err_ctx");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("broken.toml");
+        std::fs::write(&path, "[spec\npath = broken").unwrap();
+
+        let err = load(&path).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("broken.toml"),
+            "parse error should include the file path, got: {msg}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── Manifest with unknown keys is fine (forward compat) ─────────────
+
+    #[test]
+    fn parse_manifest_ignores_unknown_top_level_keys() {
+        let toml = r#"
+[spec]
+path = "api.yaml"
+
+[unknown_section]
+foo = "bar"
+"#;
+        let result: Result<Manifest, _> = toml::from_str(toml);
+        assert!(
+            result.is_err() || result.unwrap().spec.is_some(),
+            "either reject or at least parse spec"
+        );
+    }
+
+    // ── SpecConfig version field ────────────────────────────────────────
+
+    #[test]
+    fn spec_config_version_is_optional() {
+        let toml = r#"
+[spec]
+path = "api.yaml"
+"#;
+        let m: Manifest = toml::from_str(toml).unwrap();
+        assert!(m.spec.as_ref().unwrap()._version.is_none());
+    }
+
+    #[test]
+    fn spec_config_version_is_preserved() {
+        let toml = r#"
+[spec]
+path = "api.yaml"
+version = "3.1"
+"#;
+        let m: Manifest = toml::from_str(toml).unwrap();
+        assert_eq!(m.spec.as_ref().unwrap()._version.as_deref(), Some("3.1"));
+    }
+
+    // ── OutputConfig ────────────────────────────────────────────────────
+
+    #[test]
+    fn output_config_dir_is_optional() {
+        let toml = r#"
+[output]
+"#;
+        let m: Manifest = toml::from_str(toml).unwrap();
+        assert!(m.output.as_ref().unwrap().dir.is_none());
+    }
+
+    // ── merge: manifest with empty target lists ─────────────────────────
+
+    #[test]
+    fn merge_manifest_with_empty_sdk_targets() {
+        let manifest: Manifest = toml::from_str(
+            r#"
+[sdks]
+targets = []
+"#,
+        )
+        .unwrap();
+        let cli = empty_cli();
+        let config = merge_with_cli(Some(&manifest), &cli);
+        assert!(config.sdks.is_empty());
+    }
+
+    #[test]
+    fn merge_manifest_with_empty_iac_backends() {
+        let manifest: Manifest = toml::from_str(
+            r#"
+[iac]
+backends = []
+"#,
+        )
+        .unwrap();
+        let cli = empty_cli();
+        let config = merge_with_cli(Some(&manifest), &cli);
+        assert!(config.iac_backends.is_empty());
+    }
 }

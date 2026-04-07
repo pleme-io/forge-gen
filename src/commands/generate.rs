@@ -848,4 +848,377 @@ mod tests {
             vec!["generate", "--spec", "spec.yaml", "--output", "./out/completion/fish", "--format", "fish"]
         );
     }
+
+    // ── build_iac_task ──────────────────────────────────────────────────
+
+    #[test]
+    fn build_iac_task_sets_correct_fields() {
+        let config = make_config();
+        let task = build_iac_task("terraform", &config);
+        assert_eq!(task.name, "terraform");
+        assert_eq!(task.spec, "api.yaml");
+        assert!(task.output_dir.ends_with("iac/terraform"));
+        assert!(task.resources.is_none());
+        assert!(task.provider.is_none());
+    }
+
+    #[test]
+    fn build_iac_task_propagates_resources_and_provider() {
+        let mut config = make_config();
+        config.iac_resources = Some("./res".to_string());
+        config.iac_provider = Some("./prov.toml".to_string());
+
+        let task = build_iac_task("pulumi", &config);
+        assert_eq!(task.resources.as_deref(), Some("./res"));
+        assert_eq!(task.provider.as_deref(), Some("./prov.toml"));
+    }
+
+    #[test]
+    fn iac_task_build_args_with_only_resources() {
+        let task = IacTask {
+            name: "crossplane".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out/iac/crossplane".to_string(),
+            resources: Some("./r".to_string()),
+            provider: None,
+        };
+        let args = task.build_args();
+        assert!(args.contains(&"--resources".to_string()));
+        assert!(!args.contains(&"--provider".to_string()));
+    }
+
+    #[test]
+    fn iac_task_build_args_with_only_provider() {
+        let task = IacTask {
+            name: "ansible".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out/iac/ansible".to_string(),
+            resources: None,
+            provider: Some("./p.toml".to_string()),
+        };
+        let args = task.build_args();
+        assert!(!args.contains(&"--resources".to_string()));
+        assert!(args.contains(&"--provider".to_string()));
+    }
+
+    // ── build_helm_task ─────────────────────────────────────────────────
+
+    #[test]
+    fn build_helm_task_sets_correct_fields() {
+        let config = make_config();
+        let task = build_helm_task("helm", &config);
+        assert_eq!(task.name, "helm");
+        assert_eq!(task.spec, "api.yaml");
+        assert!(task.output_dir.ends_with("helm/helm"));
+    }
+
+    #[test]
+    fn build_helm_task_uses_helm_resources_when_set() {
+        let mut config = make_config();
+        config.helm_resources = Some("./helm-res".to_string());
+        config.iac_resources = Some("./iac-res".to_string());
+
+        let task = build_helm_task("helm", &config);
+        assert_eq!(
+            task.resources.as_deref(),
+            Some("./helm-res"),
+            "helm_resources should take priority over iac_resources"
+        );
+    }
+
+    #[test]
+    fn build_helm_task_falls_back_to_iac_resources() {
+        let mut config = make_config();
+        config.helm_resources = None;
+        config.iac_resources = Some("./iac-res".to_string());
+
+        let task = build_helm_task("helm", &config);
+        assert_eq!(
+            task.resources.as_deref(),
+            Some("./iac-res"),
+            "should fall back to iac_resources when helm_resources is None"
+        );
+    }
+
+    #[test]
+    fn build_helm_task_uses_helm_provider_when_set() {
+        let mut config = make_config();
+        config.helm_provider = Some("./hp.toml".to_string());
+        config.iac_provider = Some("./ip.toml".to_string());
+
+        let task = build_helm_task("helm", &config);
+        assert_eq!(task.provider.as_deref(), Some("./hp.toml"));
+    }
+
+    #[test]
+    fn build_helm_task_falls_back_to_iac_provider() {
+        let mut config = make_config();
+        config.helm_provider = None;
+        config.iac_provider = Some("./ip.toml".to_string());
+
+        let task = build_helm_task("helm", &config);
+        assert_eq!(task.provider.as_deref(), Some("./ip.toml"));
+    }
+
+    #[test]
+    fn build_helm_task_no_resources_no_provider() {
+        let config = make_config();
+        let task = build_helm_task("helm", &config);
+        assert!(task.resources.is_none());
+        assert!(task.provider.is_none());
+    }
+
+    #[test]
+    fn helm_task_build_args_minimal() {
+        let task = HelmTask {
+            name: "helm".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out/helm/helm".to_string(),
+            resources: None,
+            provider: None,
+        };
+        let args = task.build_args();
+        assert_eq!(
+            args,
+            vec![
+                "generate", "--backend", "helm", "--spec", "spec.yaml",
+                "--output", "./out/helm/helm",
+            ]
+        );
+    }
+
+    #[test]
+    fn helm_task_build_args_with_provider() {
+        let task = HelmTask {
+            name: "helm".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out/helm/helm".to_string(),
+            resources: None,
+            provider: Some("./p.toml".to_string()),
+        };
+        let args = task.build_args();
+        assert!(args.contains(&"--provider".to_string()));
+        assert!(args.contains(&"./p.toml".to_string()));
+    }
+
+    // ── build_mcp_task ──────────────────────────────────────────────────
+
+    #[test]
+    fn build_mcp_task_sets_correct_fields() {
+        let config = make_config();
+        let task = build_mcp_task("mcp-rust", &config);
+        assert_eq!(task.name, "mcp-rust");
+        assert_eq!(task.spec, "api.yaml");
+        assert!(task.output_dir.ends_with("mcp/mcp-rust"));
+        assert!(task.project_name.is_none());
+    }
+
+    #[test]
+    fn build_mcp_task_propagates_project_name() {
+        let mut config = make_config();
+        config.mcp_name = Some("my-server".to_string());
+
+        let task = build_mcp_task("mcp-rust", &config);
+        assert_eq!(task.project_name.as_deref(), Some("my-server"));
+    }
+
+    #[test]
+    fn mcp_task_build_args_without_name() {
+        let task = McpTask {
+            name: "mcp-rust".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out/mcp/mcp-rust".to_string(),
+            project_name: None,
+        };
+        let args = task.build_args();
+        assert_eq!(
+            args,
+            vec!["generate", "--spec", "spec.yaml", "--output", "./out/mcp/mcp-rust"]
+        );
+        assert!(!args.contains(&"--name".to_string()));
+    }
+
+    // ── resolve_targets edge cases ──────────────────────────────────────
+
+    #[test]
+    fn resolve_targets_all_case_insensitive() {
+        let result = resolve_targets(&["ALL".to_string()], Category::Helm);
+        assert!(result.contains(&"helm".to_string()));
+    }
+
+    #[test]
+    fn resolve_targets_all_mixed_with_others_still_expands() {
+        let result = resolve_targets(
+            &["go".to_string(), "all".to_string()],
+            Category::Completion,
+        );
+        assert!(
+            result.contains(&"skim-tab".to_string()),
+            "presence of 'all' anywhere should expand"
+        );
+        assert!(result.contains(&"fish".to_string()));
+    }
+
+    #[test]
+    fn resolve_targets_single_specific() {
+        let result = resolve_targets(&["terraform".to_string()], Category::Iac);
+        assert_eq!(result, vec!["terraform"]);
+    }
+
+    #[test]
+    fn resolve_targets_all_sdk_returns_28() {
+        let result = resolve_targets(&["all".to_string()], Category::Sdk);
+        assert_eq!(result.len(), 28);
+    }
+
+    #[test]
+    fn resolve_targets_all_iac_returns_6() {
+        let result = resolve_targets(&["all".to_string()], Category::Iac);
+        assert_eq!(result.len(), 6);
+    }
+
+    // ── build_openapi_task edge cases ───────────────────────────────────
+
+    #[test]
+    fn build_openapi_task_unknown_generator_uses_name_as_generator() {
+        let config = make_config();
+        let task = build_openapi_task("nonexistent-gen", "sdk", &config);
+        assert_eq!(
+            task.generator, "nonexistent-gen",
+            "unknown generators should use the name as the generator string"
+        );
+    }
+
+    #[test]
+    fn build_openapi_task_known_generator_maps_name_to_generator() {
+        let config = make_config();
+        let task = build_openapi_task("typescript", "sdk", &config);
+        assert_eq!(task.generator, "typescript-fetch");
+    }
+
+    #[test]
+    fn build_openapi_task_server_category() {
+        let config = make_config();
+        let task = build_openapi_task("rust-axum", "server", &config);
+        assert_eq!(task.category, "server");
+        assert_eq!(task.generator, "rust-axum");
+        assert!(task.output_dir.ends_with("server/rust-axum"));
+    }
+
+    #[test]
+    fn build_openapi_task_schema_category() {
+        let config = make_config();
+        let task = build_openapi_task("graphql-schema", "schema", &config);
+        assert_eq!(task.category, "schema");
+        assert!(task.output_dir.ends_with("schema/graphql-schema"));
+    }
+
+    #[test]
+    fn build_openapi_task_doc_category() {
+        let config = make_config();
+        let task = build_openapi_task("html", "doc", &config);
+        assert_eq!(task.generator, "html2");
+        assert!(task.output_dir.ends_with("doc/html"));
+    }
+
+    // ── completion_task partial options ─────────────────────────────────
+
+    #[test]
+    fn completion_task_build_args_with_only_name() {
+        let task = CompletionTask {
+            name: "skim-tab".to_string(),
+            format: "skim-tab".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out/completion/skim-tab".to_string(),
+            project_name: Some("cli".to_string()),
+            icon: None,
+            grouping: None,
+            aliases: vec![],
+        };
+        let args = task.build_args();
+        assert!(args.contains(&"--name".to_string()));
+        assert!(args.contains(&"cli".to_string()));
+        assert!(!args.contains(&"--icon".to_string()));
+        assert!(!args.contains(&"--grouping".to_string()));
+        assert!(!args.contains(&"--aliases".to_string()));
+    }
+
+    #[test]
+    fn completion_task_build_args_with_only_icon() {
+        let task = CompletionTask {
+            name: "fish".to_string(),
+            format: "fish".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out/completion/fish".to_string(),
+            project_name: None,
+            icon: Some("🐟".to_string()),
+            grouping: None,
+            aliases: vec![],
+        };
+        let args = task.build_args();
+        assert!(args.contains(&"--icon".to_string()));
+        assert!(args.contains(&"🐟".to_string()));
+        assert!(!args.contains(&"--name".to_string()));
+    }
+
+    #[test]
+    fn completion_task_build_args_with_only_grouping() {
+        let task = CompletionTask {
+            name: "skim-tab".to_string(),
+            format: "skim-tab".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out".to_string(),
+            project_name: None,
+            icon: None,
+            grouping: Some("path".to_string()),
+            aliases: vec![],
+        };
+        let args = task.build_args();
+        assert!(args.contains(&"--grouping".to_string()));
+        assert!(args.contains(&"path".to_string()));
+    }
+
+    #[test]
+    fn completion_task_single_alias() {
+        let task = CompletionTask {
+            name: "fish".to_string(),
+            format: "fish".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out".to_string(),
+            project_name: None,
+            icon: None,
+            grouping: None,
+            aliases: vec!["f".to_string()],
+        };
+        let args = task.build_args();
+        assert!(args.contains(&"--aliases".to_string()));
+        assert!(args.contains(&"f".to_string()));
+    }
+
+    // ── Helper ──────────────────────────────────────────────────────────
+
+    fn make_config() -> GenerateConfig {
+        GenerateConfig {
+            spec: "api.yaml".to_string(),
+            output_dir: "./out".to_string(),
+            sdks: vec![],
+            servers: vec![],
+            iac_backends: vec![],
+            iac_resources: None,
+            iac_provider: None,
+            schemas: vec![],
+            docs: vec![],
+            helm_targets: vec![],
+            helm_resources: None,
+            helm_provider: None,
+            mcp_targets: vec![],
+            mcp_name: None,
+            completion_targets: vec![],
+            completion_name: None,
+            completion_icon: None,
+            completion_grouping: None,
+            completion_aliases: vec![],
+            parallel: true,
+        }
+    }
 }

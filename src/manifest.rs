@@ -21,6 +21,7 @@ pub struct Manifest {
     pub completions: Option<CompletionConfig>,
 }
 
+/// Helm chart generation section in `forge-gen.toml`.
 #[derive(Debug, Deserialize)]
 pub struct HelmConfig {
     pub targets: Vec<String>,
@@ -28,6 +29,7 @@ pub struct HelmConfig {
     pub provider: Option<String>,
 }
 
+/// MCP server generation section in `forge-gen.toml`.
 #[derive(Debug, Deserialize)]
 pub struct McpConfig {
     pub targets: Vec<String>,
@@ -35,6 +37,7 @@ pub struct McpConfig {
     pub name: Option<String>,
 }
 
+/// Shell completion generation section in `forge-gen.toml`.
 #[derive(Debug, Deserialize)]
 pub struct CompletionConfig {
     pub targets: Vec<String>,
@@ -49,6 +52,7 @@ pub struct CompletionConfig {
     pub aliases: Vec<String>,
 }
 
+/// Spec path and version in `forge-gen.toml`.
 #[derive(Debug, Deserialize)]
 pub struct SpecConfig {
     pub path: String,
@@ -56,11 +60,13 @@ pub struct SpecConfig {
     pub _version: Option<String>,
 }
 
+/// Output directory configuration in `forge-gen.toml`.
 #[derive(Debug, Default, Deserialize)]
 pub struct OutputConfig {
     pub dir: Option<String>,
 }
 
+/// Generic target list with optional per-target overrides.
 #[derive(Debug, Deserialize)]
 pub struct TargetList {
     pub targets: Vec<String>,
@@ -68,6 +74,7 @@ pub struct TargetList {
     pub _overrides: Option<BTreeMap<String, BTreeMap<String, String>>>,
 }
 
+/// Infrastructure-as-Code generation section in `forge-gen.toml`.
 #[derive(Debug, Deserialize)]
 pub struct IacConfig {
     pub backends: Vec<String>,

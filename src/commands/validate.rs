@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
 use colored::Colorize;
 
+/// CLI arguments for the `validate` subcommand.
 #[derive(Debug, ClapArgs)]
 pub struct Args {
     /// Path to the `OpenAPI` spec (YAML or JSON)

@@ -4,6 +4,7 @@ use anyhow::{Result, bail};
 use clap::Args as ClapArgs;
 use colored::Colorize;
 
+/// CLI arguments for the `init` subcommand.
 #[derive(Debug, ClapArgs)]
 pub struct Args {
     /// Output directory (default: current directory)

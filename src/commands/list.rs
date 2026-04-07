@@ -3,6 +3,7 @@ use colored::Colorize;
 
 use crate::registry::{self, Category};
 
+/// CLI arguments for the `list` subcommand.
 #[derive(Debug, ClapArgs)]
 pub struct Args {
     /// Filter to a specific category (sdk, server, schema, doc, iac)

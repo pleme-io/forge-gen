@@ -1,5 +1,10 @@
 use std::fmt;
 
+/// Error returned when a string cannot be parsed as a [`Category`].
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("unknown category: {0}")]
+pub struct ParseCategoryError(String);
+
 /// Category of a code generator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Category {
@@ -14,7 +19,7 @@ pub enum Category {
 }
 
 impl std::str::FromStr for Category {
-    type Err = anyhow::Error;
+    type Err = ParseCategoryError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
@@ -26,7 +31,7 @@ impl std::str::FromStr for Category {
             "helm" => Ok(Self::Helm),
             "mcp" => Ok(Self::Mcp),
             "completion" | "completions" => Ok(Self::Completion),
-            other => anyhow::bail!("unknown category: {other}"),
+            other => Err(ParseCategoryError(other.to_string())),
         }
     }
 }

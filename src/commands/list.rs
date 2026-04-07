@@ -54,7 +54,7 @@ pub fn run(args: &Args) -> anyhow::Result<()> {
 }
 
 fn parse_category(s: &str) -> anyhow::Result<Category> {
-    s.parse()
+    Ok(s.parse()?)
 }
 
 #[cfg(test)]

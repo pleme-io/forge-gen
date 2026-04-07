@@ -8,6 +8,7 @@ use crate::commands::generate::Args as CliArgs;
 
 /// Top-level `forge-gen.toml` schema.
 #[derive(Debug, Default, Deserialize)]
+#[non_exhaustive]
 pub struct Manifest {
     pub spec: Option<SpecConfig>,
     pub output: Option<OutputConfig>,
@@ -83,7 +84,8 @@ pub struct IacConfig {
 }
 
 /// Resolved configuration used by the generate orchestrator.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
+#[must_use]
 pub struct GenerateConfig {
     pub spec: String,
     pub output_dir: String,
@@ -107,12 +109,40 @@ pub struct GenerateConfig {
     pub parallel: bool,
 }
 
+impl Default for GenerateConfig {
+    fn default() -> Self {
+        Self {
+            spec: String::new(),
+            output_dir: String::from("./generated"),
+            sdks: Vec::new(),
+            servers: Vec::new(),
+            iac_backends: Vec::new(),
+            iac_resources: None,
+            iac_provider: None,
+            schemas: Vec::new(),
+            docs: Vec::new(),
+            helm_targets: Vec::new(),
+            helm_resources: None,
+            helm_provider: None,
+            mcp_targets: Vec::new(),
+            mcp_name: None,
+            completion_targets: Vec::new(),
+            completion_name: None,
+            completion_icon: None,
+            completion_grouping: None,
+            completion_aliases: Vec::new(),
+            parallel: true,
+        }
+    }
+}
+
 /// Load a `forge-gen.toml` manifest from the given path.
 ///
 /// # Errors
 ///
 /// Returns an error if the file cannot be read or is not valid TOML.
-pub fn load(path: &Path) -> Result<Manifest> {
+pub fn load(path: impl AsRef<Path>) -> Result<Manifest> {
+    let path = path.as_ref();
     let content =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     toml::from_str(&content).with_context(|| format!("parsing {}", path.display()))
@@ -143,7 +173,6 @@ fn resolve_completion_fields(manifest: Option<&Manifest>, cli: &CliArgs) -> (Opt
 ///
 /// CLI arguments override manifest values. "all" in any target list is resolved
 /// later by the generator (which knows the full registry).
-#[must_use]
 pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateConfig {
     let spec = cli_or_manifest(cli.spec.as_ref(), manifest, |m| {
         m.spec.as_ref().map(|s| s.path.clone())
@@ -1259,6 +1288,22 @@ version = "3.1"
     }
 
     // ── merge: manifest with empty target lists ─────────────────────────
+
+    #[test]
+    fn generate_config_default_has_expected_values() {
+        let config = GenerateConfig::default();
+        assert_eq!(config.output_dir, "./generated");
+        assert!(config.spec.is_empty());
+        assert!(config.sdks.is_empty());
+        assert!(config.parallel);
+    }
+
+    #[test]
+    fn generate_config_equality() {
+        let a = GenerateConfig::default();
+        let b = GenerateConfig::default();
+        assert_eq!(a, b);
+    }
 
     #[test]
     fn merge_manifest_with_empty_sdk_targets() {

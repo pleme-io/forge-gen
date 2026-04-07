@@ -1344,24 +1344,7 @@ mod tests {
         GenerateConfig {
             spec: "api.yaml".to_string(),
             output_dir: "./out".to_string(),
-            sdks: vec![],
-            servers: vec![],
-            iac_backends: vec![],
-            iac_resources: None,
-            iac_provider: None,
-            schemas: vec![],
-            docs: vec![],
-            helm_targets: vec![],
-            helm_resources: None,
-            helm_provider: None,
-            mcp_targets: vec![],
-            mcp_name: None,
-            completion_targets: vec![],
-            completion_name: None,
-            completion_icon: None,
-            completion_grouping: None,
-            completion_aliases: vec![],
-            parallel: true,
+            ..GenerateConfig::default()
         }
     }
 }

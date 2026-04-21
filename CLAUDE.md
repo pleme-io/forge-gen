@@ -1,5 +1,13 @@
 # Forge Gen — Unified Code Generator from OpenAPI Specs
 
+<!-- Blackmatter alignment: pillars 3, 12 -->
+<!-- See ~/code/github/pleme-io/BLACKMATTER.md for pillar definitions. -->
+
+## Blackmatter pillars upheld
+
+- **Pillar 3** (API generation): Forge Gen IS Pillar 3. One OpenAPI spec → SDKs (Rust/Go/Python/JS/Java/Swift) + gRPC proto + GraphQL schema + REST server + MCP server + IaC (Pangea/Terraform/Pulumi/Crossplane/Ansible) + completions + docs. Never hand-write two copies of the same schema.
+- **Pillar 12** (Generation over composition): the unified `--iac`, `--sdks`, `--servers`, `--mcp`, `--completions`, `--schemas`, `--docs` flags make "can this be generated?" the first question for every API surface.
+
 ## Build & Test
 
 ```bash

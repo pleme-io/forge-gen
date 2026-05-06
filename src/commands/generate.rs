@@ -153,6 +153,27 @@ pub struct Args {
     /// Run generators in parallel
     #[arg(long, default_value = "true")]
     pub parallel: bool,
+
+    /// Comma-separated `key=value` pairs forwarded to openapi-generator-cli's
+    /// `--additional-properties` flag (e.g.
+    /// `packageName=akeyless,packageVersion=0.1.0,withGoMod=true`).
+    /// Applies to SDK / server / schema / doc targets that go through
+    /// `openapi-generator-cli`; ignored by `iac-forge` / `mcp-forge` /
+    /// `completion-forge` task types.
+    #[arg(long)]
+    pub additional_properties: Option<String>,
+
+    /// Forwarded to `openapi-generator-cli --git-user-id`. The Go generator
+    /// uses this together with `--git-repo-id` to fill the `go.mod` module
+    /// path. Without these flags, generated `go.mod` files contain the
+    /// placeholder `github.com/GIT_USER_ID/GIT_REPO_ID`.
+    #[arg(long)]
+    pub git_user_id: Option<String>,
+
+    /// Forwarded to `openapi-generator-cli --git-repo-id`. Pairs with
+    /// `--git-user-id` to produce a fully-qualified module path.
+    #[arg(long)]
+    pub git_repo_id: Option<String>,
 }
 
 /// Run the generate command.
@@ -173,7 +194,7 @@ pub async fn run(args: Args) -> Result<()> {
         None
     };
 
-    let config = manifest::merge_with_cli(loaded.as_ref(), &args);
+    let mut config = manifest::merge_with_cli(loaded.as_ref(), &args);
 
     if config.spec.is_empty() {
         bail!("no OpenAPI spec provided — use --spec or set spec.path in forge-gen.toml");
@@ -182,6 +203,15 @@ pub async fn run(args: Args) -> Result<()> {
     if !Path::new(&config.spec).exists() {
         bail!("spec file not found: {}", config.spec);
     }
+
+    // openapi-generator-cli's parser chokes on YAML inputs that contain
+    // datetime literals (the akeyless OpenAPI is the canonical reproducer:
+    // https://github.com/OpenAPITools/openapi-generator/issues/9203).
+    // We side-step the issue by transparently transcoding YAML → JSON
+    // through serde_yaml + serde_json once, up front, and pointing every
+    // downstream task at the converted JSON path. The original spec is
+    // never mutated.
+    config.spec = ensure_json_spec(&config.spec, &config.output_dir)?;
 
     // Resolve "all" targets into the full set of names per category.
     let sdks = resolve_targets(&config.sdks, Category::Sdk);
@@ -307,6 +337,38 @@ fn push_optional(args: &mut Vec<String>, flag: &str, value: Option<&String>) {
     }
 }
 
+/// Return a path to a JSON spec usable by openapi-generator-cli. If the input
+/// is already JSON, return it unchanged. If it's YAML (`.yaml` / `.yml`),
+/// transcode to a deterministic JSON file under `output_dir` and return that
+/// path. The original input is never modified.
+fn ensure_json_spec(spec: &str, output_dir: &str) -> Result<String> {
+    let lower = spec.to_ascii_lowercase();
+    if !(lower.ends_with(".yaml") || lower.ends_with(".yml")) {
+        return Ok(spec.to_string());
+    }
+
+    let yaml = std::fs::read_to_string(spec)
+        .with_context(|| format!("reading spec {spec}"))?;
+    let value: serde_yaml::Value = serde_yaml::from_str(&yaml)
+        .with_context(|| format!("parsing YAML {spec}"))?;
+    let json = serde_json::to_string_pretty(&value)
+        .with_context(|| format!("encoding JSON for {spec}"))?;
+
+    std::fs::create_dir_all(output_dir)
+        .with_context(|| format!("creating output dir {output_dir}"))?;
+
+    let stem = Path::new(spec)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("spec");
+    let json_path = format!("{output_dir}/.forge-gen-{stem}.json");
+    std::fs::write(&json_path, json)
+        .with_context(|| format!("writing transcoded spec to {json_path}"))?;
+
+    tracing::info!(input = spec, output = %json_path, "transcoded YAML spec to JSON");
+    Ok(json_path)
+}
+
 /// Result of a single generator invocation.
 struct TaskResult {
     name: String,
@@ -322,6 +384,9 @@ struct OpenApiTask {
     category: &'static str,
     spec: String,
     output_dir: String,
+    additional_properties: Option<String>,
+    git_user_id: Option<String>,
+    git_repo_id: Option<String>,
 }
 
 impl TaskRunner for OpenApiTask {
@@ -331,7 +396,7 @@ impl TaskRunner for OpenApiTask {
     fn binary_name(&self) -> &'static str { "openapi-generator-cli" }
 
     fn build_args(&self) -> Vec<String> {
-        vec![
+        let mut args = vec![
             String::from("generate"),
             String::from("-i"),
             self.spec.clone(),
@@ -339,7 +404,15 @@ impl TaskRunner for OpenApiTask {
             self.generator.clone(),
             String::from("-o"),
             self.output_dir.clone(),
-        ]
+        ];
+        push_optional(&mut args, "--git-user-id", self.git_user_id.as_ref());
+        push_optional(&mut args, "--git-repo-id", self.git_repo_id.as_ref());
+        push_optional(
+            &mut args,
+            "--additional-properties",
+            self.additional_properties.as_ref(),
+        );
+        args
     }
 }
 
@@ -354,6 +427,9 @@ fn build_openapi_task(name: &str, category: &'static str, config: &GenerateConfi
         category,
         spec: config.spec.clone(),
         output_dir: out,
+        additional_properties: config.openapi_additional_properties.clone(),
+        git_user_id: config.openapi_git_user_id.clone(),
+        git_repo_id: config.openapi_git_repo_id.clone(),
     }
 }
 
@@ -556,6 +632,9 @@ mod tests {
             completion_grouping: None,
             completion_aliases: vec![],
             parallel: true,
+            openapi_additional_properties: None,
+            openapi_git_user_id: None,
+            openapi_git_repo_id: None,
         };
         let task = build_openapi_task("go", "sdk", &config);
         assert_eq!(task.name, "go");
@@ -587,6 +666,9 @@ mod tests {
             completion_grouping: Some("tag".to_string()),
             completion_aliases: vec!["mt".to_string()],
             parallel: true,
+            openapi_additional_properties: None,
+            openapi_git_user_id: None,
+            openapi_git_repo_id: None,
         };
         let task = build_completion_task("skim-tab", &config);
         assert_eq!(task.name, "skim-tab");
@@ -606,6 +688,9 @@ mod tests {
             category: "sdk",
             spec: "api.yaml".to_string(),
             output_dir: "./out/sdk/go".to_string(),
+            additional_properties: None,
+            git_user_id: None,
+            git_repo_id: None,
         };
         assert_eq!(task.name(), "go");
         assert_eq!(task.category(), "sdk");
@@ -621,12 +706,80 @@ mod tests {
             category: "sdk",
             spec: "spec.yaml".to_string(),
             output_dir: "./out/sdk/python".to_string(),
+            additional_properties: None,
+            git_user_id: None,
+            git_repo_id: None,
         };
         let args = task.build_args();
         assert_eq!(
             args,
             vec!["generate", "-i", "spec.yaml", "-g", "python", "-o", "./out/sdk/python"]
         );
+    }
+
+    #[test]
+    fn openapi_task_build_args_with_passthrough_flags() {
+        let task = OpenApiTask {
+            name: "go".to_string(),
+            generator: "go".to_string(),
+            category: "sdk",
+            spec: "spec.json".to_string(),
+            output_dir: "./out/sdk/go".to_string(),
+            additional_properties: Some(
+                "packageName=akeyless,packageVersion=0.1.0,withGoMod=true".to_string(),
+            ),
+            git_user_id: Some("pleme-io".to_string()),
+            git_repo_id: Some("akeyless-go".to_string()),
+        };
+        let args = task.build_args();
+        assert_eq!(
+            args,
+            vec![
+                "generate",
+                "-i", "spec.json",
+                "-g", "go",
+                "-o", "./out/sdk/go",
+                "--git-user-id", "pleme-io",
+                "--git-repo-id", "akeyless-go",
+                "--additional-properties",
+                "packageName=akeyless,packageVersion=0.1.0,withGoMod=true",
+            ]
+        );
+    }
+
+    #[test]
+    fn ensure_json_spec_returns_json_path_unchanged() {
+        let path = ensure_json_spec("./api/openapi.json", "./out").expect("ensure");
+        assert_eq!(path, "./api/openapi.json");
+    }
+
+    #[test]
+    fn ensure_json_spec_transcodes_yaml_to_json() {
+        let tmp = std::env::temp_dir().join(format!(
+            "forge-gen-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&tmp).expect("mkdir tmp");
+        let yaml_path = tmp.join("input.yaml");
+        std::fs::write(
+            &yaml_path,
+            "openapi: 3.0.0\ninfo:\n  title: T\n  version: \"1\"\npaths: {}\n",
+        )
+        .expect("write yaml");
+
+        let json_path = ensure_json_spec(
+            yaml_path.to_str().unwrap(),
+            tmp.to_str().unwrap(),
+        )
+        .expect("transcode");
+
+        assert!(json_path.ends_with(".json"));
+        let json = std::fs::read_to_string(&json_path).expect("read json");
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("parse json");
+        assert_eq!(parsed["openapi"], "3.0.0");
+        assert_eq!(parsed["info"]["title"], "T");
+
+        std::fs::remove_dir_all(&tmp).ok();
     }
 
     #[test]

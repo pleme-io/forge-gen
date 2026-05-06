@@ -107,6 +107,16 @@ pub struct GenerateConfig {
     pub completion_grouping: Option<String>,
     pub completion_aliases: Vec<String>,
     pub parallel: bool,
+    /// Comma-separated key=value pairs forwarded to openapi-generator-cli's
+    /// `--additional-properties` flag for SDK / server / schema / doc targets.
+    /// Example: `packageName=akeyless,packageVersion=0.1.0,withGoMod=true`.
+    pub openapi_additional_properties: Option<String>,
+    /// Forwarded to openapi-generator-cli's `--git-user-id`. Used by the Go
+    /// generator (and others) to fill the module path in the generated `go.mod`.
+    pub openapi_git_user_id: Option<String>,
+    /// Forwarded to openapi-generator-cli's `--git-repo-id`. Pairs with
+    /// `git-user-id` to produce a fully-qualified module path.
+    pub openapi_git_repo_id: Option<String>,
 }
 
 impl Default for GenerateConfig {
@@ -132,6 +142,9 @@ impl Default for GenerateConfig {
             completion_grouping: None,
             completion_aliases: Vec::new(),
             parallel: true,
+            openapi_additional_properties: None,
+            openapi_git_user_id: None,
+            openapi_git_repo_id: None,
         }
     }
 }
@@ -218,6 +231,9 @@ pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateCon
         completion_targets, completion_name, completion_icon,
         completion_grouping, completion_aliases,
         parallel: cli.parallel,
+        openapi_additional_properties: cli.additional_properties.clone(),
+        openapi_git_user_id: cli.git_user_id.clone(),
+        openapi_git_repo_id: cli.git_repo_id.clone(),
     }
 }
 
@@ -294,6 +310,9 @@ mod tests {
             provider: None,
             manifest: None,
             parallel: true,
+            additional_properties: None,
+            git_user_id: None,
+            git_repo_id: None,
         }
     }
 

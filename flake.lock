@@ -892,30 +892,6 @@
         "type": "github"
       }
     },
-    "fenix_2": {
-      "inputs": {
-        "nixpkgs": [
-          "substrate",
-          "gen",
-          "substrate",
-          "nixpkgs"
-        ],
-        "rust-analyzer-src": "rust-analyzer-src_2"
-      },
-      "locked": {
-        "lastModified": 1779790483,
-        "narHash": "sha256-2wCMtmVmkCcyHaH6hkrbx7XdUgLYP5E1wl/jc1YxxTY=",
-        "owner": "nix-community",
-        "repo": "fenix",
-        "rev": "6012e5463531342033571efe294ec880bf13dd95",
-        "type": "github"
-      },
-      "original": {
-        "owner": "nix-community",
-        "repo": "fenix",
-        "type": "github"
-      }
-    },
     "flake-compat": {
       "locked": {
         "lastModified": 1733328505,
@@ -1446,11 +1422,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1779881326,
-        "narHash": "sha256-d8CPz7Fz88GElecXhDmGRp8by2AUnffd4HuipQOntmA=",
+        "lastModified": 1779887046,
+        "narHash": "sha256-zT/70EqXaSeLltaA1F3se+KyjlFFuwxUcLkvdwUBoc8=",
         "owner": "pleme-io",
         "repo": "forge",
-        "rev": "1e3c982ef45252153349672f2e9669dc8db645b9",
+        "rev": "85a4e5b46e0f1c45ed31b9378d00d105aa621a47",
         "type": "github"
       },
       "original": {
@@ -3152,23 +3128,6 @@
         "type": "github"
       }
     },
-    "rust-analyzer-src_2": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1779742949,
-        "narHash": "sha256-Dk0hnFTXbmNmigsJyQkCz2NEEgtpe+MN500dPnki9Ic=",
-        "owner": "rust-lang",
-        "repo": "rust-analyzer",
-        "rev": "462d95ca60fa7360b44258be94105bc20e203684",
-        "type": "github"
-      },
-      "original": {
-        "owner": "rust-lang",
-        "ref": "nightly",
-        "repo": "rust-analyzer",
-        "type": "github"
-      }
-    },
     "rust-overlay": {
       "inputs": {
         "nixpkgs": [
@@ -3273,11 +3232,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1779878290,
-        "narHash": "sha256-LUNAzm0IZhKukJ6EDmTH/RBJGWwLet2C0vj3GO7WrZU=",
+        "lastModified": 1779883611,
+        "narHash": "sha256-sjAy6TUyc/gIN9uk1bLyVK2A+WIap2Qt2feAXVTJGmo=",
         "owner": "pleme-io",
         "repo": "substrate",
-        "rev": "77f2688165dc8ba44d568e24776e2ca21dc655b3",
+        "rev": "f2a05590584fb8d2ddb09a7b1afab06f2e28277b",
         "type": "github"
       },
       "original": {

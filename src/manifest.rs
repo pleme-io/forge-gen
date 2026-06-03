@@ -19,6 +19,7 @@ pub struct Manifest {
     pub docs: Option<TargetList>,
     pub helm: Option<HelmConfig>,
     pub mcp: Option<McpConfig>,
+    pub grpc: Option<GrpcConfig>,
     pub completions: Option<CompletionConfig>,
 }
 
@@ -36,6 +37,16 @@ pub struct McpConfig {
     pub targets: Vec<String>,
     /// Project name for generated MCP server (defaults to spec title)
     pub name: Option<String>,
+}
+
+/// gRPC server generation section in `forge-gen.toml`.
+#[derive(Debug, Deserialize)]
+pub struct GrpcConfig {
+    pub targets: Vec<String>,
+    /// Crate name for the generated tonic server (defaults to spec title)
+    pub name: Option<String>,
+    /// Proto package (e.g. `breathe.v1`; defaults to `<name>.v1`)
+    pub package: Option<String>,
 }
 
 /// Shell completion generation section in `forge-gen.toml`.
@@ -101,6 +112,9 @@ pub struct GenerateConfig {
     pub helm_provider: Option<String>,
     pub mcp_targets: Vec<String>,
     pub mcp_name: Option<String>,
+    pub grpc_targets: Vec<String>,
+    pub grpc_name: Option<String>,
+    pub grpc_package: Option<String>,
     pub completion_targets: Vec<String>,
     pub completion_name: Option<String>,
     pub completion_icon: Option<String>,
@@ -136,6 +150,9 @@ impl Default for GenerateConfig {
             helm_provider: None,
             mcp_targets: Vec::new(),
             mcp_name: None,
+            grpc_targets: Vec::new(),
+            grpc_name: None,
+            grpc_package: None,
             completion_targets: Vec::new(),
             completion_name: None,
             completion_icon: None,
@@ -200,12 +217,19 @@ pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateCon
     let schemas = parse_csv_or(cli.schemas.as_deref(), manifest.and_then(|m| m.schemas.as_ref()));
     let docs = parse_csv_or(cli.docs.as_deref(), manifest.and_then(|m| m.docs.as_ref()));
     let mcp_targets = parse_csv_or(cli.mcp.as_deref(), manifest.and_then(|m| m.mcp.as_ref()));
+    let grpc_targets = parse_csv_or(cli.grpc.as_deref(), manifest.and_then(|m| m.grpc.as_ref()));
     let helm_targets = parse_csv_or(cli.helm.as_deref(), manifest.and_then(|m| m.helm.as_ref()));
     let iac_backends = parse_csv_or(cli.iac.as_deref(), manifest.and_then(|m| m.iac.as_ref()));
     let completion_targets = parse_csv_or(cli.completions.as_deref(), manifest.and_then(|m| m.completions.as_ref()));
 
     let mcp_name = cli_or_manifest(cli.mcp_name.as_ref(), manifest, |m| {
         m.mcp.as_ref().and_then(|mc| mc.name.clone())
+    });
+    let grpc_name = cli_or_manifest(cli.grpc_name.as_ref(), manifest, |m| {
+        m.grpc.as_ref().and_then(|g| g.name.clone())
+    });
+    let grpc_package = cli_or_manifest(cli.grpc_package.as_ref(), manifest, |m| {
+        m.grpc.as_ref().and_then(|g| g.package.clone())
     });
     let helm_resources = cli_or_manifest(cli.helm_resources.as_ref(), manifest, |m| {
         m.helm.as_ref().and_then(|h| h.resources.clone())
@@ -228,6 +252,7 @@ pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateCon
         iac_backends, iac_resources, iac_provider,
         helm_targets, helm_resources, helm_provider,
         mcp_targets, mcp_name,
+        grpc_targets, grpc_name, grpc_package,
         completion_targets, completion_name, completion_icon,
         completion_grouping, completion_aliases,
         parallel: cli.parallel,
@@ -248,6 +273,12 @@ impl HasTargets for TargetList {
 }
 
 impl HasTargets for McpConfig {
+    fn targets(&self) -> &[String] {
+        &self.targets
+    }
+}
+
+impl HasTargets for GrpcConfig {
     fn targets(&self) -> &[String] {
         &self.targets
     }
@@ -304,6 +335,9 @@ mod tests {
             helm_provider: None,
             mcp: None,
             mcp_name: None,
+            grpc: None,
+            grpc_name: None,
+            grpc_package: None,
             completions: None,
             completion_name: None,
             resources: None,
@@ -1141,6 +1175,93 @@ name = "manifest-mcp-name"
         let cli = empty_cli();
         let config = merge_with_cli(Some(&manifest), &cli);
         assert_eq!(config.mcp_name.as_deref(), Some("manifest-mcp-name"));
+    }
+
+    // ── gRPC config ─────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_grpc_full() {
+        let toml = r#"
+[grpc]
+targets = ["grpc-rust"]
+name = "breathe-grpc"
+package = "breathe.v1"
+"#;
+        let m: Manifest = toml::from_str(toml).expect("valid TOML");
+        let grpc = m.grpc.as_ref().unwrap();
+        assert_eq!(grpc.targets, vec!["grpc-rust"]);
+        assert_eq!(grpc.name.as_deref(), Some("breathe-grpc"));
+        assert_eq!(grpc.package.as_deref(), Some("breathe.v1"));
+    }
+
+    #[test]
+    fn parse_grpc_without_optional_fields() {
+        let toml = r#"
+[grpc]
+targets = ["grpc-rust"]
+"#;
+        let m: Manifest = toml::from_str(toml).expect("valid TOML");
+        let grpc = m.grpc.as_ref().unwrap();
+        assert_eq!(grpc.targets, vec!["grpc-rust"]);
+        assert!(grpc.name.is_none());
+        assert!(grpc.package.is_none());
+    }
+
+    #[test]
+    fn merge_grpc_from_manifest_when_cli_absent() {
+        let manifest: Manifest = toml::from_str(
+            r#"
+[grpc]
+targets = ["grpc-rust"]
+name = "manifest-grpc"
+package = "manifest.v1"
+"#,
+        )
+        .unwrap();
+        let cli = empty_cli();
+        let config = merge_with_cli(Some(&manifest), &cli);
+        assert_eq!(config.grpc_targets, vec!["grpc-rust"]);
+        assert_eq!(config.grpc_name.as_deref(), Some("manifest-grpc"));
+        assert_eq!(config.grpc_package.as_deref(), Some("manifest.v1"));
+    }
+
+    #[test]
+    fn merge_cli_overrides_grpc() {
+        let manifest: Manifest = toml::from_str(
+            r#"
+[grpc]
+targets = ["grpc-rust"]
+name = "manifest-grpc"
+package = "manifest.v1"
+"#,
+        )
+        .unwrap();
+        let mut cli = empty_cli();
+        cli.grpc = Some(String::from("grpc-rust"));
+        cli.grpc_name = Some(String::from("cli-grpc"));
+        cli.grpc_package = Some(String::from("cli.v2"));
+
+        let config = merge_with_cli(Some(&manifest), &cli);
+        assert_eq!(config.grpc_targets, vec!["grpc-rust"]);
+        assert_eq!(config.grpc_name.as_deref(), Some("cli-grpc"));
+        assert_eq!(config.grpc_package.as_deref(), Some("cli.v2"));
+    }
+
+    #[test]
+    fn parse_csv_or_grpc_uses_manifest_fallback() {
+        let gc = GrpcConfig {
+            targets: vec![String::from("grpc-rust")],
+            name: Some(String::from("test")),
+            package: None,
+        };
+        let result = parse_csv_or(None, Some(&gc));
+        assert_eq!(result, vec!["grpc-rust"]);
+    }
+
+    #[test]
+    fn parse_csv_or_grpc_both_none() {
+        let result = parse_csv_or::<GrpcConfig>(None, None);
+        assert!(result.is_empty());
     }
 
     // ── IaC config ──────────────────────────────────────────────────────

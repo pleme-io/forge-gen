@@ -130,6 +130,18 @@ pub struct Args {
     #[arg(long)]
     pub mcp_name: Option<String>,
 
+    /// Comma-separated gRPC server targets or "all" (via grpc-forge)
+    #[arg(long)]
+    pub grpc: Option<String>,
+
+    /// Crate name for gRPC server generation
+    #[arg(long)]
+    pub grpc_name: Option<String>,
+
+    /// Proto package for gRPC server generation (e.g. `breathe.v1`)
+    #[arg(long)]
+    pub grpc_package: Option<String>,
+
     /// Comma-separated completion formats or "all" (via completion-forge)
     #[arg(long)]
     pub completions: Option<String>,
@@ -221,14 +233,15 @@ pub async fn run(args: Args) -> Result<()> {
     let iac_backends = resolve_targets(&config.iac_backends, Category::Iac);
     let helm_targets = resolve_targets(&config.helm_targets, Category::Helm);
     let mcp_targets = resolve_targets(&config.mcp_targets, Category::Mcp);
+    let grpc_targets = resolve_targets(&config.grpc_targets, Category::Grpc);
     let completion_targets = resolve_targets(&config.completion_targets, Category::Completion);
 
     let total =
-        sdks.len() + servers.len() + schemas.len() + docs.len() + iac_backends.len() + helm_targets.len() + mcp_targets.len() + completion_targets.len();
+        sdks.len() + servers.len() + schemas.len() + docs.len() + iac_backends.len() + helm_targets.len() + mcp_targets.len() + grpc_targets.len() + completion_targets.len();
 
     if total == 0 {
         bail!(
-            "nothing to generate — specify at least one of --sdks, --servers, --iac, --helm, --schemas, --docs, --mcp, --completions"
+            "nothing to generate — specify at least one of --sdks, --servers, --iac, --helm, --schemas, --docs, --mcp, --grpc, --completions"
         );
     }
 
@@ -254,6 +267,7 @@ pub async fn run(args: Args) -> Result<()> {
     for name in &iac_backends { tasks.push(Box::new(build_iac_task(name, &config))); }
     for name in &helm_targets { tasks.push(Box::new(build_helm_task(name, &config))); }
     for name in &mcp_targets { tasks.push(Box::new(build_mcp_task(name, &config))); }
+    for name in &grpc_targets { tasks.push(Box::new(build_grpc_task(name, &config))); }
     for name in &completion_targets { tasks.push(Box::new(build_completion_task(name, &config))); }
 
     if config.parallel {
@@ -532,6 +546,47 @@ fn build_mcp_task(name: &str, config: &GenerateConfig) -> McpTask {
     }
 }
 
+/// Describes a grpc-forge invocation.
+struct GrpcTask {
+    name: String,
+    spec: String,
+    output_dir: String,
+    project_name: Option<String>,
+    package: Option<String>,
+}
+
+impl TaskRunner for GrpcTask {
+    fn name(&self) -> &str { &self.name }
+    fn category(&self) -> &'static str { "grpc" }
+    fn output_dir(&self) -> &str { &self.output_dir }
+    fn binary_name(&self) -> &'static str { "grpc-forge" }
+
+    fn build_args(&self) -> Vec<String> {
+        let mut args = vec![
+            String::from("generate"),
+            String::from("--spec"),
+            self.spec.clone(),
+            String::from("--output"),
+            self.output_dir.clone(),
+        ];
+        push_optional(&mut args, "--name", self.project_name.as_ref());
+        push_optional(&mut args, "--package", self.package.as_ref());
+        args
+    }
+}
+
+fn build_grpc_task(name: &str, config: &GenerateConfig) -> GrpcTask {
+    let out = format!("{}/grpc/{name}", config.output_dir);
+
+    GrpcTask {
+        name: name.to_string(),
+        spec: config.spec.clone(),
+        output_dir: out,
+        project_name: config.grpc_name.clone(),
+        package: config.grpc_package.clone(),
+    }
+}
+
 /// Describes a completion-forge invocation.
 struct CompletionTask {
     name: String,
@@ -626,6 +681,9 @@ mod tests {
             helm_provider: None,
             mcp_targets: vec![],
             mcp_name: None,
+            grpc_targets: vec![],
+            grpc_name: None,
+            grpc_package: None,
             completion_targets: vec![],
             completion_name: None,
             completion_icon: None,
@@ -660,6 +718,9 @@ mod tests {
             helm_provider: None,
             mcp_targets: vec![],
             mcp_name: None,
+            grpc_targets: vec![],
+            grpc_name: None,
+            grpc_package: None,
             completion_targets: vec![],
             completion_name: Some("my-tool".to_string()),
             completion_icon: Some("\u{2601}".to_string()),
@@ -1157,6 +1218,88 @@ mod tests {
         assert!(!args.contains(&"--name".to_string()));
     }
 
+    // ── build_grpc_task ─────────────────────────────────────────────────
+
+    #[test]
+    fn grpc_task_runner_fields() {
+        let task = GrpcTask {
+            name: "grpc-rust".to_string(),
+            spec: "api.yaml".to_string(),
+            output_dir: "./out/grpc/grpc-rust".to_string(),
+            project_name: None,
+            package: None,
+        };
+        assert_eq!(task.name(), "grpc-rust");
+        assert_eq!(task.category(), "grpc");
+        assert_eq!(task.binary_name(), "grpc-forge");
+    }
+
+    #[test]
+    fn build_grpc_task_sets_correct_fields() {
+        let config = make_config();
+        let task = build_grpc_task("grpc-rust", &config);
+        assert_eq!(task.name, "grpc-rust");
+        assert_eq!(task.spec, "api.yaml");
+        assert!(task.output_dir.ends_with("grpc/grpc-rust"));
+        assert!(task.project_name.is_none());
+        assert!(task.package.is_none());
+    }
+
+    #[test]
+    fn build_grpc_task_propagates_name_and_package() {
+        let mut config = make_config();
+        config.grpc_name = Some("breathe-grpc".to_string());
+        config.grpc_package = Some("breathe.v1".to_string());
+
+        let task = build_grpc_task("grpc-rust", &config);
+        assert_eq!(task.project_name.as_deref(), Some("breathe-grpc"));
+        assert_eq!(task.package.as_deref(), Some("breathe.v1"));
+    }
+
+    #[test]
+    fn grpc_task_build_args_with_name_and_package() {
+        let task = GrpcTask {
+            name: "grpc-rust".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out/grpc/grpc-rust".to_string(),
+            project_name: Some("breathe-grpc".to_string()),
+            package: Some("breathe.v1".to_string()),
+        };
+        let args = task.build_args();
+        assert_eq!(
+            args,
+            vec![
+                "generate", "--spec", "spec.yaml", "--output", "./out/grpc/grpc-rust",
+                "--name", "breathe-grpc", "--package", "breathe.v1",
+            ]
+        );
+    }
+
+    #[test]
+    fn grpc_task_build_args_without_optionals() {
+        let task = GrpcTask {
+            name: "grpc-rust".to_string(),
+            spec: "spec.yaml".to_string(),
+            output_dir: "./out/grpc/grpc-rust".to_string(),
+            project_name: None,
+            package: None,
+        };
+        let args = task.build_args();
+        assert_eq!(
+            args,
+            vec!["generate", "--spec", "spec.yaml", "--output", "./out/grpc/grpc-rust"]
+        );
+        assert!(!args.contains(&"--name".to_string()));
+        assert!(!args.contains(&"--package".to_string()));
+    }
+
+    #[test]
+    fn resolve_targets_all_grpc_returns_1() {
+        let result = resolve_targets(&["all".to_string()], Category::Grpc);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], "grpc-rust");
+    }
+
     // ── resolve_targets edge cases ──────────────────────────────────────
 
     #[test]
@@ -1432,6 +1575,9 @@ mod tests {
         let mcp = build_mcp_task("mcp-rust", &config);
         assert_eq!(mcp.binary_name(), "mcp-forge");
 
+        let grpc = build_grpc_task("grpc-rust", &config);
+        assert_eq!(grpc.binary_name(), "grpc-forge");
+
         let comp = build_completion_task("fish", &config);
         assert_eq!(comp.binary_name(), "completion-forge");
     }
@@ -1451,6 +1597,9 @@ mod tests {
 
         let mcp = build_mcp_task("mcp-rust", &config);
         assert_eq!(mcp.category(), "mcp");
+
+        let grpc = build_grpc_task("grpc-rust", &config);
+        assert_eq!(grpc.category(), "grpc");
 
         let comp = build_completion_task("fish", &config);
         assert_eq!(comp.category(), "completion");

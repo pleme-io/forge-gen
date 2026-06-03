@@ -18,6 +18,7 @@ pub enum Category {
     Iac,
     Helm,
     Mcp,
+    Grpc,
     Completion,
 }
 
@@ -31,6 +32,7 @@ impl Category {
         Self::Iac,
         Self::Helm,
         Self::Mcp,
+        Self::Grpc,
         Self::Completion,
     ];
 
@@ -45,6 +47,7 @@ impl Category {
             Self::Iac => "iac",
             Self::Helm => "helm",
             Self::Mcp => "mcp",
+            Self::Grpc => "grpc",
             Self::Completion => "completion",
         }
     }
@@ -62,6 +65,7 @@ impl std::str::FromStr for Category {
             "iac" => Ok(Self::Iac),
             "helm" => Ok(Self::Helm),
             "mcp" => Ok(Self::Mcp),
+            "grpc" => Ok(Self::Grpc),
             "completion" | "completions" => Ok(Self::Completion),
             _ => Err(ParseCategoryError {
                 input: s.to_string(),
@@ -86,6 +90,7 @@ impl fmt::Display for Category {
             Self::Iac => write!(f, "IaC"),
             Self::Helm => write!(f, "Helm"),
             Self::Mcp => write!(f, "MCP"),
+            Self::Grpc => write!(f, "gRPC"),
             Self::Completion => write!(f, "Completion"),
         }
     }
@@ -107,8 +112,8 @@ pub struct GeneratorInfo {
 
 /// Full static registry of every supported generator.
 ///
-/// 51 generators across 8 categories: SDK (28), Server (5), Schema (4),
-/// Doc (4), `IaC` (6), Helm (1), MCP (1), Completion (2).
+/// 52 generators across 9 categories: SDK (28), Server (5), Schema (4),
+/// Doc (4), `IaC` (6), Helm (1), MCP (1), gRPC (1), Completion (2).
 pub static REGISTRY: &[GeneratorInfo] = &[
     // ── Client SDKs ──────────────────────────────────────────────────
     GeneratorInfo { name: "go",                  generator: "go",                    category: Category::Sdk, description: "Go client SDK" },
@@ -172,6 +177,9 @@ pub static REGISTRY: &[GeneratorInfo] = &[
 
     // ── MCP server backends (via mcp-forge) ─────────────────────────
     GeneratorInfo { name: "mcp-rust",            generator: "mcp-rust",               category: Category::Mcp, description: "Rust MCP server (rmcp 0.15, CLI + stdio)" },
+
+    // ── gRPC server backends (via grpc-forge) ───────────────────────
+    GeneratorInfo { name: "grpc-rust",           generator: "grpc-rust",              category: Category::Grpc, description: "Rust tonic gRPC server (typed proto3 + scaffold)" },
 
     // ── Completion generators (via completion-forge) ────────────────
     GeneratorInfo { name: "skim-tab",            generator: "skim-tab",               category: Category::Completion, description: "skim-tab YAML completion spec" },
@@ -324,6 +332,20 @@ mod tests {
     }
 
     #[test]
+    fn registry_contains_expected_grpc_generators() {
+        let names: Vec<&str> = REGISTRY
+            .iter()
+            .filter(|g| g.category == Category::Grpc)
+            .map(|g| g.name)
+            .collect();
+
+        assert!(
+            names.contains(&"grpc-rust"),
+            "gRPC registry missing grpc-rust"
+        );
+    }
+
+    #[test]
     fn registry_names_are_unique() {
         let mut seen = std::collections::HashSet::new();
         for g in REGISTRY {
@@ -375,6 +397,13 @@ mod tests {
     fn find_mcp_rust() {
         let info = find("mcp-rust").expect("mcp-rust should exist");
         assert_eq!(info.category, Category::Mcp);
+    }
+
+    #[test]
+    fn find_grpc_rust() {
+        let info = find("grpc-rust").expect("grpc-rust should exist");
+        assert_eq!(info.category, Category::Grpc);
+        assert_eq!(info.generator, "grpc-rust");
     }
 
     #[test]
@@ -449,6 +478,15 @@ mod tests {
         assert!(!mcp.is_empty());
         for g in &mcp {
             assert_eq!(g.category, Category::Mcp);
+        }
+    }
+
+    #[test]
+    fn by_category_grpc_returns_only_grpc() {
+        let grpc = by_category(Category::Grpc);
+        assert!(!grpc.is_empty());
+        for g in &grpc {
+            assert_eq!(g.category, Category::Grpc);
         }
     }
 
@@ -528,6 +566,7 @@ mod tests {
         assert_eq!(format!("{}", Category::Iac), "IaC");
         assert_eq!(format!("{}", Category::Helm), "Helm");
         assert_eq!(format!("{}", Category::Mcp), "MCP");
+        assert_eq!(format!("{}", Category::Grpc), "gRPC");
         assert_eq!(format!("{}", Category::Completion), "Completion");
     }
 
@@ -555,6 +594,7 @@ mod tests {
         assert_eq!("iac".parse::<Category>().unwrap(), Category::Iac);
         assert_eq!("helm".parse::<Category>().unwrap(), Category::Helm);
         assert_eq!("mcp".parse::<Category>().unwrap(), Category::Mcp);
+        assert_eq!("grpc".parse::<Category>().unwrap(), Category::Grpc);
         assert_eq!(
             "completion".parse::<Category>().unwrap(),
             Category::Completion
@@ -660,13 +700,18 @@ mod tests {
     }
 
     #[test]
+    fn grpc_count_is_1() {
+        assert_eq!(by_category(Category::Grpc).len(), 1);
+    }
+
+    #[test]
     fn completion_count_is_2() {
         assert_eq!(by_category(Category::Completion).len(), 2);
     }
 
     #[test]
-    fn total_registry_count_is_51() {
-        assert_eq!(REGISTRY.len(), 51);
+    fn total_registry_count_is_52() {
+        assert_eq!(REGISTRY.len(), 52);
     }
 
     // ── GeneratorInfo field correctness: spot-check representative entries ──
@@ -722,6 +767,12 @@ mod tests {
     }
 
     #[test]
+    fn names_for_category_grpc_returns_single_entry() {
+        let names = names_for_category(Category::Grpc);
+        assert_eq!(names, vec!["grpc-rust"]);
+    }
+
+    #[test]
     fn names_for_category_completion() {
         let names = names_for_category(Category::Completion);
         assert_eq!(names.len(), 2);
@@ -765,8 +816,9 @@ mod tests {
 
     #[test]
     fn category_all_contains_every_variant() {
-        assert_eq!(Category::ALL.len(), 8);
+        assert_eq!(Category::ALL.len(), 9);
         assert!(Category::ALL.contains(&Category::Sdk));
+        assert!(Category::ALL.contains(&Category::Grpc));
         assert!(Category::ALL.contains(&Category::Completion));
     }
 

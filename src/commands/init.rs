@@ -72,6 +72,13 @@ targets = ["go", "python", "typescript"]
 # targets = ["mcp-rust"]
 # name = "my-api"
 
+# ── gRPC servers (via grpc-forge) ───────────────────────────────────────────
+# Targets: grpc-rust
+# [grpc]
+# targets = ["grpc-rust"]
+# name = "my-api-grpc"        # crate name (defaults to spec title)
+# package = "myapi.v1"        # proto package (defaults to <name>.v1)
+
 # ── Shell completions (via completion-forge) ────────────────────────────────
 # Targets: skim-tab, fish
 # [completions]

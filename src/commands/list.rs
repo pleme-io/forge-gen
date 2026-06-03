@@ -28,6 +28,7 @@ pub fn run(args: &Args) -> anyhow::Result<()> {
             Category::Iac,
             Category::Helm,
             Category::Mcp,
+            Category::Grpc,
             Category::Completion,
         ]
     };

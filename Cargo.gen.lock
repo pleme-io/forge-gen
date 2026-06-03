@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "cargo_lock_sha256": "e8cbb185c34f0303ca6322a7d6e56f7af5ec2a51176b3d74bf585e3d213d59f8",
+  "cargo_lock_sha256": "4d3cd274cbb0ecd4676fc7577ef720ba511641d9ee7ad799c10a85b81ea2e9bf",
   "target_resolves": {
     "base": {
       "aho-corasick-1.1.4": {
         "runtime_dependencies": [
           {
             "name": "memchr",
-            "package_key": "memchr-2.8.0",
+            "package_key": "memchr-2.8.1",
             "kind": "normal",
             "features": [],
             "uses_default_features": false,
@@ -131,7 +131,7 @@
           "std"
         ]
       },
-      "bitflags-2.11.1": {
+      "bitflags-2.12.1": {
         "runtime_dependencies": [],
         "build_dependencies": [],
         "features": [
@@ -361,7 +361,7 @@
           "std"
         ]
       },
-      "forge-gen-0.1.1": {
+      "forge-gen-0.1.2": {
         "runtime_dependencies": [
           {
             "name": "anyhow",
@@ -574,7 +574,7 @@
           "std"
         ]
       },
-      "log-0.4.30": {
+      "log-0.4.31": {
         "runtime_dependencies": [],
         "build_dependencies": [],
         "features": [
@@ -597,7 +597,7 @@
         "build_dependencies": [],
         "features": []
       },
-      "memchr-2.8.0": {
+      "memchr-2.8.1": {
         "runtime_dependencies": [],
         "build_dependencies": [],
         "features": [
@@ -605,7 +605,7 @@
           "std"
         ]
       },
-      "mio-1.2.0": {
+      "mio-1.2.1": {
         "runtime_dependencies": [
           {
             "name": "libc",
@@ -700,7 +700,7 @@
           },
           {
             "name": "memchr",
-            "package_key": "memchr-2.8.0",
+            "package_key": "memchr-2.8.1",
             "kind": "normal",
             "features": [],
             "uses_default_features": false,
@@ -842,7 +842,7 @@
           },
           {
             "name": "memchr",
-            "package_key": "memchr-2.8.0",
+            "package_key": "memchr-2.8.1",
             "kind": "normal",
             "features": [],
             "uses_default_features": false,
@@ -1164,7 +1164,7 @@
           },
           {
             "name": "mio",
-            "package_key": "mio-1.2.0",
+            "package_key": "mio-1.2.1",
             "kind": "normal",
             "features": [],
             "uses_default_features": false,
@@ -1174,7 +1174,7 @@
           },
           {
             "name": "mio",
-            "package_key": "mio-1.2.0",
+            "package_key": "mio-1.2.1",
             "kind": "normal",
             "features": [],
             "uses_default_features": false,
@@ -1532,7 +1532,7 @@
         "runtime_dependencies": [
           {
             "name": "log",
-            "package_key": "log-0.4.30",
+            "package_key": "log-0.4.31",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1809,7 +1809,7 @@
         "runtime_dependencies": [
           {
             "name": "memchr",
-            "package_key": "memchr-2.8.0",
+            "package_key": "memchr-2.8.1",
             "kind": "normal",
             "features": [],
             "uses_default_features": false,
@@ -1838,7 +1838,7 @@
             "runtime_dependencies": [
               {
                 "name": "bitflags",
-                "package_key": "bitflags-2.11.1",
+                "package_key": "bitflags-2.12.1",
                 "kind": "normal",
                 "features": [],
                 "uses_default_features": false,
@@ -1912,7 +1912,7 @@
             "runtime_dependencies": [
               {
                 "name": "bitflags",
-                "package_key": "bitflags-2.11.1",
+                "package_key": "bitflags-2.12.1",
                 "kind": "normal",
                 "features": [],
                 "uses_default_features": false,
@@ -1998,7 +1998,7 @@
             "runtime_dependencies": [
               {
                 "name": "bitflags",
-                "package_key": "bitflags-2.11.1",
+                "package_key": "bitflags-2.12.1",
                 "kind": "normal",
                 "features": [],
                 "uses_default_features": false,
@@ -2104,7 +2104,7 @@
             "runtime_dependencies": [
               {
                 "name": "bitflags",
-                "package_key": "bitflags-2.11.1",
+                "package_key": "bitflags-2.12.1",
                 "kind": "normal",
                 "features": [],
                 "uses_default_features": false,
@@ -2210,7 +2210,7 @@
             "runtime_dependencies": [
               {
                 "name": "bitflags",
-                "package_key": "bitflags-2.11.1",
+                "package_key": "bitflags-2.12.1",
                 "kind": "normal",
                 "features": [],
                 "uses_default_features": false,
@@ -2316,7 +2316,7 @@
             "runtime_dependencies": [
               {
                 "name": "bitflags",
-                "package_key": "bitflags-2.11.1",
+                "package_key": "bitflags-2.12.1",
                 "kind": "normal",
                 "features": [],
                 "uses_default_features": false,
@@ -2426,7 +2426,7 @@
       "edition": "2021",
       "build_script": "build.rs"
     },
-    "bitflags-2.11.1": {
+    "bitflags-2.12.1": {
       "edition": "2021"
     },
     "bytes-1.11.1": {
@@ -2472,7 +2472,7 @@
     "errno-0.3.14": {
       "edition": "2018"
     },
-    "forge-gen-0.1.1": {
+    "forge-gen-0.1.2": {
       "edition": "2024",
       "binaries": [
         {
@@ -2506,16 +2506,16 @@
       "edition": "2021",
       "build_script": "build.rs"
     },
-    "log-0.4.30": {
+    "log-0.4.31": {
       "edition": "2021"
     },
     "matchers-0.2.0": {
       "edition": "2018"
     },
-    "memchr-2.8.0": {
+    "memchr-2.8.1": {
       "edition": "2021"
     },
-    "mio-1.2.0": {
+    "mio-1.2.1": {
       "edition": "2021"
     },
     "nu-ansi-term-0.50.3": {

@@ -1,43 +1,11 @@
 {
   description = "forge-gen — unified code generator from OpenAPI specs";
 
-  inputs = {
-    nixpkgs.follows = "substrate/nixpkgs";
-    fenix = {
-      url = "github:nix-community/fenix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    substrate = {
-      url = "github:pleme-io/substrate";
-      inputs.fenix.follows = "fenix";
-    };
-    forge = {
-      url = "github:pleme-io/forge";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.fenix.follows = "fenix";
-      inputs.substrate.follows = "substrate";
-      inputs.crate2nix.follows = "crate2nix";
-    };
-    crate2nix = {
-      url = "github:nix-community/crate2nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    devenv = {
-      url = "github:cachix/devenv";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-  };
+  # substrate.rust.service dispatches over Cargo.gen.lock (the slim gen delta,
+  # reconstructed to the full BuildSpec in pure Nix) — no crate2nix, no Cargo.nix.
+  inputs.substrate.url = "github:pleme-io/substrate";
 
-  outputs = { self, nixpkgs, substrate, forge, crate2nix, devenv, ... }:
-    (import "${substrate}/lib/rust-service-flake.nix" {
-      inherit nixpkgs substrate forge crate2nix devenv;
-    }) {
-      inherit self;
-      serviceName = "forge-gen";
-      registry = "ghcr.io/pleme-io/forge-gen";
-      packageName = "forge-gen";
-      namespace = "forge-system";
-      architectures = ["amd64" "arm64"];
-      ports = { health = 8081; };
-    };
+  outputs = { substrate, ... }: substrate.rust.service {
+    src = ./.;
+  };
 }

@@ -49,11 +49,7 @@ pub fn run(args: &Args) -> Result<()> {
         serde_json::from_str(&content).with_context(|| "parsing spec as JSON")?
     };
 
-    println!(
-        "\n{} Validating {}",
-        "=>".blue().bold(),
-        path.display()
-    );
+    println!("\n{} Validating {}", "=>".blue().bold(), path.display());
 
     // ── Info section ─────────────────────────────────────────────────
     if let Some(info) = spec.get("info") {
@@ -147,7 +143,10 @@ mod tests {
             spec: path.to_str().unwrap().to_string(),
         };
         let result = run(&args);
-        assert!(result.is_ok(), "validate should succeed for valid JSON spec");
+        assert!(
+            result.is_ok(),
+            "validate should succeed for valid JSON spec"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -249,11 +248,7 @@ mod tests {
         let dir = std::env::temp_dir().join("forge_gen_test_validate_no_info");
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("no-info.json");
-        std::fs::write(
-            &path,
-            r#"{ "openapi": "3.0.3", "paths": {} }"#,
-        )
-        .unwrap();
+        std::fs::write(&path, r#"{ "openapi": "3.0.3", "paths": {} }"#).unwrap();
 
         let args = Args {
             spec: path.to_str().unwrap().to_string(),
@@ -346,7 +341,11 @@ mod tests {
         let dir = std::env::temp_dir().join("forge_gen_test_validate_yml");
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("spec.yml");
-        std::fs::write(&path, "openapi: '3.0.3'\ninfo:\n  title: T\n  version: '1'\n").unwrap();
+        std::fs::write(
+            &path,
+            "openapi: '3.0.3'\ninfo:\n  title: T\n  version: '1'\n",
+        )
+        .unwrap();
 
         let args = Args {
             spec: path.to_str().unwrap().to_string(),
@@ -416,11 +415,7 @@ mod tests {
         let dir = std::env::temp_dir().join("forge_gen_test_validate_no_title");
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("notitle.json");
-        std::fs::write(
-            &path,
-            r#"{ "info": {}, "paths": {} }"#,
-        )
-        .unwrap();
+        std::fs::write(&path, r#"{ "info": {}, "paths": {} }"#).unwrap();
 
         let args = Args {
             spec: path.to_str().unwrap().to_string(),

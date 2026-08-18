@@ -62,7 +62,7 @@ async fn run(cmd: Command) -> anyhow::Result<()> {
 }
 
 fn init_tracing(json: bool) {
-    use tracing_subscriber::{fmt, EnvFilter};
+    use tracing_subscriber::{EnvFilter, fmt};
 
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     if json {
@@ -94,8 +94,7 @@ mod tests {
 
     #[test]
     fn cli_parse_validate_subcommand() {
-        let cli =
-            Cli::try_parse_from(["forge-gen", "validate", "--spec", "api.yaml"]).unwrap();
+        let cli = Cli::try_parse_from(["forge-gen", "validate", "--spec", "api.yaml"]).unwrap();
         match cli.command {
             Command::Validate(args) => assert_eq!(args.spec, "api.yaml"),
             _ => panic!("expected Validate"),
@@ -119,9 +118,15 @@ mod tests {
 
     #[test]
     fn cli_parse_generate_minimal() {
-        let cli =
-            Cli::try_parse_from(["forge-gen", "generate", "--spec", "api.yaml", "--sdks", "go"])
-                .unwrap();
+        let cli = Cli::try_parse_from([
+            "forge-gen",
+            "generate",
+            "--spec",
+            "api.yaml",
+            "--sdks",
+            "go",
+        ])
+        .unwrap();
         match cli.command {
             Command::Generate(args) => {
                 assert_eq!(args.spec.as_deref(), Some("api.yaml"));
@@ -134,16 +139,26 @@ mod tests {
     #[test]
     fn cli_parse_generate_all_target_flags() {
         let cli = Cli::try_parse_from([
-            "forge-gen", "generate",
-            "--spec", "api.yaml",
-            "--sdks", "go,python",
-            "--servers", "rust-axum",
-            "--iac", "terraform",
-            "--schemas", "graphql-schema",
-            "--docs", "markdown",
-            "--helm", "helm",
-            "--mcp", "mcp-rust",
-            "--completions", "fish",
+            "forge-gen",
+            "generate",
+            "--spec",
+            "api.yaml",
+            "--sdks",
+            "go,python",
+            "--servers",
+            "rust-axum",
+            "--iac",
+            "terraform",
+            "--schemas",
+            "graphql-schema",
+            "--docs",
+            "markdown",
+            "--helm",
+            "helm",
+            "--mcp",
+            "mcp-rust",
+            "--completions",
+            "fish",
         ])
         .unwrap();
         match cli.command {
@@ -164,12 +179,18 @@ mod tests {
     #[test]
     fn cli_parse_generate_optional_name_flags() {
         let cli = Cli::try_parse_from([
-            "forge-gen", "generate",
-            "--spec", "api.yaml",
-            "--mcp", "mcp-rust",
-            "--mcp-name", "my-api",
-            "--completions", "fish",
-            "--completion-name", "my-tool",
+            "forge-gen",
+            "generate",
+            "--spec",
+            "api.yaml",
+            "--mcp",
+            "mcp-rust",
+            "--mcp-name",
+            "my-api",
+            "--completions",
+            "fish",
+            "--completion-name",
+            "my-tool",
         ])
         .unwrap();
         match cli.command {
@@ -184,11 +205,16 @@ mod tests {
     #[test]
     fn cli_parse_generate_iac_resource_flags() {
         let cli = Cli::try_parse_from([
-            "forge-gen", "generate",
-            "--spec", "api.yaml",
-            "--iac", "terraform",
-            "--resources", "./res",
-            "--provider", "./prov.toml",
+            "forge-gen",
+            "generate",
+            "--spec",
+            "api.yaml",
+            "--iac",
+            "terraform",
+            "--resources",
+            "./res",
+            "--provider",
+            "./prov.toml",
         ])
         .unwrap();
         match cli.command {
@@ -203,11 +229,16 @@ mod tests {
     #[test]
     fn cli_parse_generate_helm_resource_flags() {
         let cli = Cli::try_parse_from([
-            "forge-gen", "generate",
-            "--spec", "api.yaml",
-            "--helm", "helm",
-            "--helm-resources", "./hr",
-            "--helm-provider", "./hp.toml",
+            "forge-gen",
+            "generate",
+            "--spec",
+            "api.yaml",
+            "--helm",
+            "helm",
+            "--helm-resources",
+            "./hr",
+            "--helm-provider",
+            "./hp.toml",
         ])
         .unwrap();
         match cli.command {
@@ -221,9 +252,15 @@ mod tests {
 
     #[test]
     fn cli_parse_generate_parallel_default_true() {
-        let cli =
-            Cli::try_parse_from(["forge-gen", "generate", "--spec", "api.yaml", "--sdks", "go"])
-                .unwrap();
+        let cli = Cli::try_parse_from([
+            "forge-gen",
+            "generate",
+            "--spec",
+            "api.yaml",
+            "--sdks",
+            "go",
+        ])
+        .unwrap();
         match cli.command {
             Command::Generate(args) => assert!(args.parallel),
             _ => panic!("expected Generate"),
@@ -233,10 +270,14 @@ mod tests {
     #[test]
     fn cli_parse_generate_manifest_flag() {
         let cli = Cli::try_parse_from([
-            "forge-gen", "generate",
-            "--spec", "api.yaml",
-            "--sdks", "go",
-            "--manifest", "custom.toml",
+            "forge-gen",
+            "generate",
+            "--spec",
+            "api.yaml",
+            "--sdks",
+            "go",
+            "--manifest",
+            "custom.toml",
         ])
         .unwrap();
         match cli.command {

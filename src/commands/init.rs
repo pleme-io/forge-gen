@@ -107,11 +107,7 @@ pub fn run(args: &Args) -> Result<()> {
     std::fs::create_dir_all(&args.dir)?;
     std::fs::write(&dest, STARTER_MANIFEST)?;
 
-    println!(
-        "{} Created {}",
-        "done".green().bold(),
-        dest.display()
-    );
+    println!("{} Created {}", "done".green().bold(), dest.display());
 
     Ok(())
 }
@@ -165,7 +161,10 @@ mod tests {
             dir: dir.to_str().unwrap().to_string(),
         };
         let result = run(&args);
-        assert!(result.is_err(), "init should refuse to overwrite existing file");
+        assert!(
+            result.is_err(),
+            "init should refuse to overwrite existing file"
+        );
 
         let content = std::fs::read_to_string(&manifest_path).unwrap();
         assert_eq!(content, "# existing");
@@ -191,8 +190,7 @@ mod tests {
 
     #[test]
     fn starter_manifest_output_dir() {
-        let m: crate::manifest::Manifest =
-            toml::from_str(STARTER_MANIFEST).unwrap();
+        let m: crate::manifest::Manifest = toml::from_str(STARTER_MANIFEST).unwrap();
         assert_eq!(
             m.output.as_ref().unwrap().dir.as_deref(),
             Some("./generated")
@@ -202,22 +200,15 @@ mod tests {
     #[test]
     fn init_creates_nested_directories() {
         let dir = std::env::temp_dir().join("forge_gen_test_init_nested/a/b/c");
-        let _ = std::fs::remove_dir_all(
-            std::env::temp_dir().join("forge_gen_test_init_nested"),
-        );
+        let _ = std::fs::remove_dir_all(std::env::temp_dir().join("forge_gen_test_init_nested"));
 
         let args = Args {
             dir: dir.to_str().unwrap().to_string(),
         };
-        assert!(
-            run(&args).is_ok(),
-            "init should create nested directories"
-        );
+        assert!(run(&args).is_ok(), "init should create nested directories");
         assert!(dir.join("forge-gen.toml").exists());
 
-        let _ = std::fs::remove_dir_all(
-            std::env::temp_dir().join("forge_gen_test_init_nested"),
-        );
+        let _ = std::fs::remove_dir_all(std::env::temp_dir().join("forge_gen_test_init_nested"));
     }
 
     #[test]

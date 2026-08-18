@@ -179,7 +179,11 @@ pub fn load(path: impl AsRef<Path>) -> Result<Manifest> {
 }
 
 /// Pick the CLI value if set, otherwise extract from the manifest via `f`.
-fn cli_or_manifest<F>(cli_value: Option<&String>, manifest: Option<&Manifest>, f: F) -> Option<String>
+fn cli_or_manifest<F>(
+    cli_value: Option<&String>,
+    manifest: Option<&Manifest>,
+    f: F,
+) -> Option<String>
 where
     F: FnOnce(&Manifest) -> Option<String>,
 {
@@ -187,7 +191,10 @@ where
 }
 
 /// Resolve the completion-specific fields from the manifest.
-fn resolve_completion_fields(manifest: Option<&Manifest>, cli: &CliArgs) -> (Option<String>, Option<String>, Option<String>, Vec<String>) {
+fn resolve_completion_fields(
+    manifest: Option<&Manifest>,
+    cli: &CliArgs,
+) -> (Option<String>, Option<String>, Option<String>, Vec<String>) {
     let name = cli_or_manifest(cli.completion_name.as_ref(), manifest, |m| {
         m.completions.as_ref().and_then(|c| c.name.clone())
     });
@@ -206,21 +213,32 @@ fn resolve_completion_fields(manifest: Option<&Manifest>, cli: &CliArgs) -> (Opt
 pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateConfig {
     let spec = cli_or_manifest(cli.spec.as_ref(), manifest, |m| {
         m.spec.as_ref().map(|s| s.path.clone())
-    }).unwrap_or_default();
+    })
+    .unwrap_or_default();
 
     let output_dir = cli_or_manifest(cli.output.as_ref(), manifest, |m| {
         m.output.as_ref().and_then(|o| o.dir.clone())
-    }).unwrap_or_else(|| String::from("./generated"));
+    })
+    .unwrap_or_else(|| String::from("./generated"));
 
     let sdks = parse_csv_or(cli.sdks.as_deref(), manifest.and_then(|m| m.sdks.as_ref()));
-    let servers = parse_csv_or(cli.servers.as_deref(), manifest.and_then(|m| m.servers.as_ref()));
-    let schemas = parse_csv_or(cli.schemas.as_deref(), manifest.and_then(|m| m.schemas.as_ref()));
+    let servers = parse_csv_or(
+        cli.servers.as_deref(),
+        manifest.and_then(|m| m.servers.as_ref()),
+    );
+    let schemas = parse_csv_or(
+        cli.schemas.as_deref(),
+        manifest.and_then(|m| m.schemas.as_ref()),
+    );
     let docs = parse_csv_or(cli.docs.as_deref(), manifest.and_then(|m| m.docs.as_ref()));
     let mcp_targets = parse_csv_or(cli.mcp.as_deref(), manifest.and_then(|m| m.mcp.as_ref()));
     let grpc_targets = parse_csv_or(cli.grpc.as_deref(), manifest.and_then(|m| m.grpc.as_ref()));
     let helm_targets = parse_csv_or(cli.helm.as_deref(), manifest.and_then(|m| m.helm.as_ref()));
     let iac_backends = parse_csv_or(cli.iac.as_deref(), manifest.and_then(|m| m.iac.as_ref()));
-    let completion_targets = parse_csv_or(cli.completions.as_deref(), manifest.and_then(|m| m.completions.as_ref()));
+    let completion_targets = parse_csv_or(
+        cli.completions.as_deref(),
+        manifest.and_then(|m| m.completions.as_ref()),
+    );
 
     let mcp_name = cli_or_manifest(cli.mcp_name.as_ref(), manifest, |m| {
         m.mcp.as_ref().and_then(|mc| mc.name.clone())
@@ -248,13 +266,28 @@ pub fn merge_with_cli(manifest: Option<&Manifest>, cli: &CliArgs) -> GenerateCon
         resolve_completion_fields(manifest, cli);
 
     GenerateConfig {
-        spec, output_dir, sdks, servers, schemas, docs,
-        iac_backends, iac_resources, iac_provider,
-        helm_targets, helm_resources, helm_provider,
-        mcp_targets, mcp_name,
-        grpc_targets, grpc_name, grpc_package,
-        completion_targets, completion_name, completion_icon,
-        completion_grouping, completion_aliases,
+        spec,
+        output_dir,
+        sdks,
+        servers,
+        schemas,
+        docs,
+        iac_backends,
+        iac_resources,
+        iac_provider,
+        helm_targets,
+        helm_resources,
+        helm_provider,
+        mcp_targets,
+        mcp_name,
+        grpc_targets,
+        grpc_name,
+        grpc_package,
+        completion_targets,
+        completion_name,
+        completion_icon,
+        completion_grouping,
+        completion_aliases,
         parallel: cli.parallel,
         openapi_additional_properties: cli.additional_properties.clone(),
         openapi_git_user_id: cli.git_user_id.clone(),
@@ -411,20 +444,14 @@ aliases = ["mc"]
         let overrides = sdks._overrides.as_ref().unwrap();
         assert_eq!(overrides["go"]["packageName"], "myapi");
 
-        assert_eq!(
-            m.servers.as_ref().unwrap().targets,
-            vec!["rust-axum"]
-        );
+        assert_eq!(m.servers.as_ref().unwrap().targets, vec!["rust-axum"]);
 
         let iac = m.iac.as_ref().unwrap();
         assert_eq!(iac.backends, vec!["terraform", "pulumi"]);
         assert_eq!(iac.resources.as_deref(), Some("./res"));
         assert_eq!(iac.provider.as_deref(), Some("./provider.toml"));
 
-        assert_eq!(
-            m.schemas.as_ref().unwrap().targets,
-            vec!["graphql-schema"]
-        );
+        assert_eq!(m.schemas.as_ref().unwrap().targets, vec!["graphql-schema"]);
         assert_eq!(m.docs.as_ref().unwrap().targets, vec!["markdown"]);
 
         let helm = m.helm.as_ref().unwrap();
@@ -1488,16 +1515,15 @@ backends = []
     #[test]
     fn cli_or_manifest_fallback_to_manifest() {
         let manifest = Manifest::default();
-        let result = cli_or_manifest(None, Some(&manifest), |_| {
-            Some(String::from("manifest"))
-        });
+        let result = cli_or_manifest(None, Some(&manifest), |_| Some(String::from("manifest")));
         assert_eq!(result.as_deref(), Some("manifest"));
     }
 
     #[test]
     fn cli_or_manifest_both_none() {
-        let result =
-            cli_or_manifest(None, None, |_: &Manifest| -> Option<String> { unreachable!() });
+        let result = cli_or_manifest(None, None, |_: &Manifest| -> Option<String> {
+            unreachable!()
+        });
         assert!(result.is_none());
     }
 

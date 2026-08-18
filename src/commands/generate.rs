@@ -64,7 +64,12 @@ async fn execute_task(
         false
     };
 
-    Ok(TaskResult { name, category, output_dir, success })
+    Ok(TaskResult {
+        name,
+        category,
+        output_dir,
+        success,
+    })
 }
 
 /// Execute a task from a boxed trait object (used by both parallel and sequential paths).
@@ -236,8 +241,15 @@ pub async fn run(args: Args) -> Result<()> {
     let grpc_targets = resolve_targets(&config.grpc_targets, Category::Grpc);
     let completion_targets = resolve_targets(&config.completion_targets, Category::Completion);
 
-    let total =
-        sdks.len() + servers.len() + schemas.len() + docs.len() + iac_backends.len() + helm_targets.len() + mcp_targets.len() + grpc_targets.len() + completion_targets.len();
+    let total = sdks.len()
+        + servers.len()
+        + schemas.len()
+        + docs.len()
+        + iac_backends.len()
+        + helm_targets.len()
+        + mcp_targets.len()
+        + grpc_targets.len()
+        + completion_targets.len();
 
     if total == 0 {
         bail!(
@@ -260,15 +272,33 @@ pub async fn run(args: Args) -> Result<()> {
 
     // Build all tasks once — shared between parallel and sequential paths.
     let mut tasks: Vec<Box<dyn TaskRunner>> = Vec::with_capacity(total);
-    for name in &sdks { tasks.push(Box::new(build_openapi_task(name, "sdk", &config))); }
-    for name in &servers { tasks.push(Box::new(build_openapi_task(name, "server", &config))); }
-    for name in &schemas { tasks.push(Box::new(build_openapi_task(name, "schema", &config))); }
-    for name in &docs { tasks.push(Box::new(build_openapi_task(name, "doc", &config))); }
-    for name in &iac_backends { tasks.push(Box::new(build_iac_task(name, &config))); }
-    for name in &helm_targets { tasks.push(Box::new(build_helm_task(name, &config))); }
-    for name in &mcp_targets { tasks.push(Box::new(build_mcp_task(name, &config))); }
-    for name in &grpc_targets { tasks.push(Box::new(build_grpc_task(name, &config))); }
-    for name in &completion_targets { tasks.push(Box::new(build_completion_task(name, &config))); }
+    for name in &sdks {
+        tasks.push(Box::new(build_openapi_task(name, "sdk", &config)));
+    }
+    for name in &servers {
+        tasks.push(Box::new(build_openapi_task(name, "server", &config)));
+    }
+    for name in &schemas {
+        tasks.push(Box::new(build_openapi_task(name, "schema", &config)));
+    }
+    for name in &docs {
+        tasks.push(Box::new(build_openapi_task(name, "doc", &config)));
+    }
+    for name in &iac_backends {
+        tasks.push(Box::new(build_iac_task(name, &config)));
+    }
+    for name in &helm_targets {
+        tasks.push(Box::new(build_helm_task(name, &config)));
+    }
+    for name in &mcp_targets {
+        tasks.push(Box::new(build_mcp_task(name, &config)));
+    }
+    for name in &grpc_targets {
+        tasks.push(Box::new(build_grpc_task(name, &config)));
+    }
+    for name in &completion_targets {
+        tasks.push(Box::new(build_completion_task(name, &config)));
+    }
 
     if config.parallel {
         let mut set = JoinSet::new();
@@ -361,10 +391,9 @@ fn ensure_json_spec(spec: &str, output_dir: &str) -> Result<String> {
         return Ok(spec.to_string());
     }
 
-    let yaml = std::fs::read_to_string(spec)
-        .with_context(|| format!("reading spec {spec}"))?;
-    let value: serde_yaml::Value = serde_yaml::from_str(&yaml)
-        .with_context(|| format!("parsing YAML {spec}"))?;
+    let yaml = std::fs::read_to_string(spec).with_context(|| format!("reading spec {spec}"))?;
+    let value: serde_yaml::Value =
+        serde_yaml::from_str(&yaml).with_context(|| format!("parsing YAML {spec}"))?;
     let json = serde_json::to_string_pretty(&value)
         .with_context(|| format!("encoding JSON for {spec}"))?;
 
@@ -404,10 +433,18 @@ struct OpenApiTask {
 }
 
 impl TaskRunner for OpenApiTask {
-    fn name(&self) -> &str { &self.name }
-    fn category(&self) -> &'static str { self.category }
-    fn output_dir(&self) -> &str { &self.output_dir }
-    fn binary_name(&self) -> &'static str { "openapi-generator-cli" }
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn category(&self) -> &'static str {
+        self.category
+    }
+    fn output_dir(&self) -> &str {
+        &self.output_dir
+    }
+    fn binary_name(&self) -> &'static str {
+        "openapi-generator-cli"
+    }
 
     fn build_args(&self) -> Vec<String> {
         let mut args = vec![
@@ -459,10 +496,18 @@ struct IacForgeTask {
 }
 
 impl TaskRunner for IacForgeTask {
-    fn name(&self) -> &str { &self.name }
-    fn category(&self) -> &'static str { self.category }
-    fn output_dir(&self) -> &str { &self.output_dir }
-    fn binary_name(&self) -> &'static str { "iac-forge" }
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn category(&self) -> &'static str {
+        self.category
+    }
+    fn output_dir(&self) -> &str {
+        &self.output_dir
+    }
+    fn binary_name(&self) -> &'static str {
+        "iac-forge"
+    }
 
     fn build_args(&self) -> Vec<String> {
         let mut args = vec![
@@ -503,8 +548,14 @@ fn build_helm_task(name: &str, config: &GenerateConfig) -> IacForgeTask {
         category: "helm",
         spec: config.spec.clone(),
         output_dir: out,
-        resources: config.helm_resources.clone().or_else(|| config.iac_resources.clone()),
-        provider: config.helm_provider.clone().or_else(|| config.iac_provider.clone()),
+        resources: config
+            .helm_resources
+            .clone()
+            .or_else(|| config.iac_resources.clone()),
+        provider: config
+            .helm_provider
+            .clone()
+            .or_else(|| config.iac_provider.clone()),
     }
 }
 
@@ -517,10 +568,18 @@ struct McpTask {
 }
 
 impl TaskRunner for McpTask {
-    fn name(&self) -> &str { &self.name }
-    fn category(&self) -> &'static str { "mcp" }
-    fn output_dir(&self) -> &str { &self.output_dir }
-    fn binary_name(&self) -> &'static str { "mcp-forge" }
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn category(&self) -> &'static str {
+        "mcp"
+    }
+    fn output_dir(&self) -> &str {
+        &self.output_dir
+    }
+    fn binary_name(&self) -> &'static str {
+        "mcp-forge"
+    }
 
     fn build_args(&self) -> Vec<String> {
         let mut args = vec![
@@ -556,10 +615,18 @@ struct GrpcTask {
 }
 
 impl TaskRunner for GrpcTask {
-    fn name(&self) -> &str { &self.name }
-    fn category(&self) -> &'static str { "grpc" }
-    fn output_dir(&self) -> &str { &self.output_dir }
-    fn binary_name(&self) -> &'static str { "grpc-forge" }
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn category(&self) -> &'static str {
+        "grpc"
+    }
+    fn output_dir(&self) -> &str {
+        &self.output_dir
+    }
+    fn binary_name(&self) -> &'static str {
+        "grpc-forge"
+    }
 
     fn build_args(&self) -> Vec<String> {
         let mut args = vec![
@@ -600,10 +667,18 @@ struct CompletionTask {
 }
 
 impl TaskRunner for CompletionTask {
-    fn name(&self) -> &str { &self.name }
-    fn category(&self) -> &'static str { "completion" }
-    fn output_dir(&self) -> &str { &self.output_dir }
-    fn binary_name(&self) -> &'static str { "completion-forge" }
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn category(&self) -> &'static str {
+        "completion"
+    }
+    fn output_dir(&self) -> &str {
+        &self.output_dir
+    }
+    fn binary_name(&self) -> &'static str {
+        "completion-forge"
+    }
 
     fn build_args(&self) -> Vec<String> {
         let mut args = vec![
@@ -774,7 +849,15 @@ mod tests {
         let args = task.build_args();
         assert_eq!(
             args,
-            vec!["generate", "-i", "spec.yaml", "-g", "python", "-o", "./out/sdk/python"]
+            vec![
+                "generate",
+                "-i",
+                "spec.yaml",
+                "-g",
+                "python",
+                "-o",
+                "./out/sdk/python"
+            ]
         );
     }
 
@@ -797,11 +880,16 @@ mod tests {
             args,
             vec![
                 "generate",
-                "-i", "spec.json",
-                "-g", "go",
-                "-o", "./out/sdk/go",
-                "--git-user-id", "pleme-io",
-                "--git-repo-id", "akeyless-go",
+                "-i",
+                "spec.json",
+                "-g",
+                "go",
+                "-o",
+                "./out/sdk/go",
+                "--git-user-id",
+                "pleme-io",
+                "--git-repo-id",
+                "akeyless-go",
                 "--additional-properties",
                 "packageName=akeyless,packageVersion=0.1.0,withGoMod=true",
             ]
@@ -816,10 +904,7 @@ mod tests {
 
     #[test]
     fn ensure_json_spec_transcodes_yaml_to_json() {
-        let tmp = std::env::temp_dir().join(format!(
-            "forge-gen-test-{}",
-            std::process::id()
-        ));
+        let tmp = std::env::temp_dir().join(format!("forge-gen-test-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).expect("mkdir tmp");
         let yaml_path = tmp.join("input.yaml");
         std::fs::write(
@@ -828,11 +913,8 @@ mod tests {
         )
         .expect("write yaml");
 
-        let json_path = ensure_json_spec(
-            yaml_path.to_str().unwrap(),
-            tmp.to_str().unwrap(),
-        )
-        .expect("transcode");
+        let json_path = ensure_json_spec(yaml_path.to_str().unwrap(), tmp.to_str().unwrap())
+            .expect("transcode");
 
         assert!(json_path.ends_with(".json"));
         let json = std::fs::read_to_string(&json_path).expect("read json");
@@ -873,7 +955,15 @@ mod tests {
         let args = task.build_args();
         assert_eq!(
             args,
-            vec!["generate", "--backend", "pulumi", "--spec", "spec.yaml", "--output", "./out/iac/pulumi"]
+            vec![
+                "generate",
+                "--backend",
+                "pulumi",
+                "--spec",
+                "spec.yaml",
+                "--output",
+                "./out/iac/pulumi"
+            ]
         );
     }
 
@@ -892,10 +982,17 @@ mod tests {
         assert_eq!(
             args,
             vec![
-                "generate", "--backend", "terraform", "--spec", "spec.yaml",
-                "--output", "./out/iac/terraform",
-                "--resources", "./res",
-                "--provider", "./prov.toml",
+                "generate",
+                "--backend",
+                "terraform",
+                "--spec",
+                "spec.yaml",
+                "--output",
+                "./out/iac/terraform",
+                "--resources",
+                "./res",
+                "--provider",
+                "./prov.toml",
             ]
         );
     }
@@ -957,7 +1054,15 @@ mod tests {
         let args = task.build_args();
         assert_eq!(
             args,
-            vec!["generate", "--spec", "spec.yaml", "--output", "./out/mcp/mcp-rust", "--name", "my-api"]
+            vec![
+                "generate",
+                "--spec",
+                "spec.yaml",
+                "--output",
+                "./out/mcp/mcp-rust",
+                "--name",
+                "my-api"
+            ]
         );
     }
 
@@ -994,10 +1099,21 @@ mod tests {
         assert_eq!(
             args,
             vec![
-                "generate", "--spec", "spec.yaml", "--output", "./out/completion/skim-tab",
-                "--format", "skim-tab", "--name", "my-tool",
-                "--icon", "*", "--grouping", "tag",
-                "--aliases", "mt,tool",
+                "generate",
+                "--spec",
+                "spec.yaml",
+                "--output",
+                "./out/completion/skim-tab",
+                "--format",
+                "skim-tab",
+                "--name",
+                "my-tool",
+                "--icon",
+                "*",
+                "--grouping",
+                "tag",
+                "--aliases",
+                "mt,tool",
             ]
         );
     }
@@ -1017,7 +1133,15 @@ mod tests {
         let args = task.build_args();
         assert_eq!(
             args,
-            vec!["generate", "--spec", "spec.yaml", "--output", "./out/completion/fish", "--format", "fish"]
+            vec![
+                "generate",
+                "--spec",
+                "spec.yaml",
+                "--output",
+                "./out/completion/fish",
+                "--format",
+                "fish"
+            ]
         );
     }
 
@@ -1159,8 +1283,13 @@ mod tests {
         assert_eq!(
             args,
             vec![
-                "generate", "--backend", "helm", "--spec", "spec.yaml",
-                "--output", "./out/helm/helm",
+                "generate",
+                "--backend",
+                "helm",
+                "--spec",
+                "spec.yaml",
+                "--output",
+                "./out/helm/helm",
             ]
         );
     }
@@ -1213,7 +1342,13 @@ mod tests {
         let args = task.build_args();
         assert_eq!(
             args,
-            vec!["generate", "--spec", "spec.yaml", "--output", "./out/mcp/mcp-rust"]
+            vec![
+                "generate",
+                "--spec",
+                "spec.yaml",
+                "--output",
+                "./out/mcp/mcp-rust"
+            ]
         );
         assert!(!args.contains(&"--name".to_string()));
     }
@@ -1269,8 +1404,15 @@ mod tests {
         assert_eq!(
             args,
             vec![
-                "generate", "--spec", "spec.yaml", "--output", "./out/grpc/grpc-rust",
-                "--name", "breathe-grpc", "--package", "breathe.v1",
+                "generate",
+                "--spec",
+                "spec.yaml",
+                "--output",
+                "./out/grpc/grpc-rust",
+                "--name",
+                "breathe-grpc",
+                "--package",
+                "breathe.v1",
             ]
         );
     }
@@ -1287,7 +1429,13 @@ mod tests {
         let args = task.build_args();
         assert_eq!(
             args,
-            vec!["generate", "--spec", "spec.yaml", "--output", "./out/grpc/grpc-rust"]
+            vec![
+                "generate",
+                "--spec",
+                "spec.yaml",
+                "--output",
+                "./out/grpc/grpc-rust"
+            ]
         );
         assert!(!args.contains(&"--name".to_string()));
         assert!(!args.contains(&"--package".to_string()));
@@ -1310,10 +1458,7 @@ mod tests {
 
     #[test]
     fn resolve_targets_all_mixed_with_others_still_expands() {
-        let result = resolve_targets(
-            &["go".to_string(), "all".to_string()],
-            Category::Completion,
-        );
+        let result = resolve_targets(&["go".to_string(), "all".to_string()], Category::Completion);
         assert!(
             result.contains(&"skim-tab".to_string()),
             "presence of 'all' anywhere should expand"

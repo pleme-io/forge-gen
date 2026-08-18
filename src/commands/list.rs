@@ -44,7 +44,12 @@ pub fn run(args: &Args) -> anyhow::Result<()> {
         println!("  {}", "-".repeat(74));
 
         for g in &generators {
-            println!("  {:<24} {:<26} {}", g.name.green(), g.generator, g.description);
+            println!(
+                "  {:<24} {:<26} {}",
+                g.name.green(),
+                g.generator,
+                g.description
+            );
         }
     }
     println!();
@@ -164,9 +169,6 @@ mod tests {
         assert_eq!(parse_category("servers").unwrap(), Category::Server);
         assert_eq!(parse_category("schemas").unwrap(), Category::Schema);
         assert_eq!(parse_category("docs").unwrap(), Category::Doc);
-        assert_eq!(
-            parse_category("completions").unwrap(),
-            Category::Completion
-        );
+        assert_eq!(parse_category("completions").unwrap(), Category::Completion);
     }
 }
